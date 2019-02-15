@@ -6,7 +6,7 @@ This shell can only be built in Mac OS and Linux/UNIX based systems.
 
 ## Build (OSX & UNIX/Linux)
 ```shell
-$ make build
+$ make all
 ```
 
 ## Author
@@ -14,4 +14,5 @@ Samridha Shrestha
 
 ## Useful resources
 1. *UNIX Tutorial* <http://www.ee.surrey.ac.uk/Teaching/Unix/index.html>
-2. *Makefile Tutorial* <https://www.cs.colostate.edu/~cs157/LectureMakefile.pdf>
+2. *Makefile Introduction Tutorial* <https://www.cs.colostate.edu/~cs157/LectureMakefile.pdf>
+3. *Makefile Intermediate Tutorial* <http://www.cs.colby.edu/maxwell/courses/tutorials/maketutor/>
