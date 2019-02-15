@@ -1,23 +1,33 @@
-CC = gcc # compiler
-CFLAGS = -Wall -Werror -Wshadow # compiler flags
-LDFLAGS = #-lm # libraries used in compile time
-OBJFILES = cmd_handler.o main.o # object files
-TARGET = shell # final executable file
+IDIR =./include# directory for header files
+SDIR =./src# source directory
+CC = gcc# compiler used
+CFLAGS = -Wall -Wshadow -Werror -I$(IDIR)# compiler flags
+LDFLAGS =# -lm library flags
+ODIR = obj# object file directory
 
-# to build executable
-all: $(TARGET)
+# Listing the header and object files
+_DEPS = builtin_cmd_handler.h# dependency header files
+_OBJ = main.o builtin_cmd_handler.o# object files
+_SRC = main.c builtin_cmd_handler.c# src c files
 
-# To clean executables
+# Pattern substitution
+# $(patsubst pattern, substitution, text)
+DEPS = $(patsubst %,$(IDIR)/%,$(_DEPS))
+OBJ = $(patsubst %,$(ODIR)/%,$(_OBJ))
+SRC = $(patsubst %,$(SDIR)/%,$(_SRC))
+
+TARGET = shell # file executable generated
+
+all : $(TARGET)
+
+$(ODIR)/%.o: $(SDIR)/%.c $(DEPS)
+	$(CC) -c -o $@ $< $(CFLAGS)
+
+$(TARGET): $(OBJ)
+	$(CC) -o $@ $^ $(CFLAGS)
+
+# Any file with the name clean will not interrupt the cmd clean
+.PHONY: clean
+
 clean:
-	rm -rf $(OBJFILES) $(TARGET) *~
-
-$(TARGET): $(OBJFILES)
-	$(CC) $(CFLAGS) -o $(TARGET) $(OBJFILES) $(LDFLAGS)
-
-# build cmd_handler.o obj file
-cmd_handler.o: cmd_handler.c cmd_handler.h
-	$(CC) $(CFLAGS) -c cmd_handler.c
-
-# build main.o obj file
-main.o: main.c
-	$(CC) $(CFLAGS) -c main.c
+	rm -rf $(ODIR)/*.o *.DS_Storema
