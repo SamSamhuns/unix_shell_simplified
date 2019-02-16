@@ -6,5 +6,7 @@
 
 /* function to handle cmd cd*/
 void cd_cmd_handler(char *arr){
+        if (DEBUG == 1)
+          printf("Inside cd_cmd_handler %s\n",arr );
         chdir(arr);
 }
