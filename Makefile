@@ -20,6 +20,7 @@ DEPS = $(patsubst %,$(IDIR)/%,$(_DEPS))
 all : $(TARGET)
 
 $(ODIR)/%.o: $(SDIR)/%.c $(DEPS)
+	@mkdir -p $(@D)
 	$(CC) -c -o $@ $< $(CFLAGS)
 
 $(TARGET): $(OBJECTS)
