@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include "common.h"
 #include "builtin_cmd_handler.h"
 #define MAX_INPUT_ARR_LEN 50 /* max number of cmd args entered each time*/
@@ -15,10 +16,11 @@ int parser(char *user_input, char *parsed_input[], size_t ui_length);
 
 /* function to handle the main loop of the cmd prompt */
 int main(void){
-
+        FILE *fptr = fopen("./history.txt", "a"); /* open history to read and save cmds to*/
         char *parsed_input[MAX_INPUT_ARR_LEN]; /* array of char ptrs to hold parsed input*/
         char *user_input = calloc(MAX_CMD_INPUT_BUFFER, sizeof(char));
-        // main while loop for function
+
+        // main while loop for shell
         while (1) {
                 int char_arg_len = 0;
                 // Checking if memory is available in the heap
@@ -27,7 +29,20 @@ int main(void){
                         return 1;
                 }
                 printf(">> ");
-                fgets(user_input, MAX_CMD_INPUT_BUFFER, stdin); /* Get user input and auto append \n at end */
+
+                /* Get user input and auto append \n at end */
+                if (fgets(user_input, MAX_CMD_INPUT_BUFFER, stdin) == NULL ) {
+                        printf("Error getting user input\n");
+                }
+
+                /* if the user just enters a new line char */
+                if (!(isalnum(user_input[0])) && strlen(user_input) == 1)  {
+                        continue;
+                }
+
+                /* Save each entered cmd to a history.txt file */
+                fprintf(fptr, "%s", user_input);
+
                 /* Parse the user_input into a array of char ptrs holding user cmd args */
                 char_arg_len = parser(&user_input[0], parsed_input, strlen(user_input));
 
@@ -44,12 +59,13 @@ int main(void){
                 if ((strcmp(parsed_input[0], "exit") == 0) && char_arg_len==1) {
                         /* the addr of the user_input must be passed to free
                            the calloced user_input*/
+                        fclose(fptr);
                         exit_cmd_handler(&user_input);
                 }
                 else if ((strcmp(parsed_input[0], "pwd") == 0) && char_arg_len==1)  {
                         pwd_cmd_handler();
                 }
-                else if ((strcmp(parsed_input[0], "cd") == 0) && char_arg_len==2)  {
+                else if ((strcmp(parsed_input[0], "cd") == 0) && char_arg_len<=2)  {
                         cd_cmd_handler(parsed_input[1]);
                 }
                 else if ((strcmp(parsed_input[0], "export") == 0) && char_arg_len==1) {

@@ -2,6 +2,6 @@
 #define COMMON_H
 
 #define MAX_CMD_INPUT_BUFFER 500
-#define DEBUG 1
+#define DEBUG 0
 
 #endif
