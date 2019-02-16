@@ -33,14 +33,13 @@ int main(void){
 
                 // Debug info
                 if (DEBUG==1) {
-                        fprintf(stdout, "3) USER INPUTED %s \nPARSED %s %lu\n", user_input, parsed_input[0], strlen(parsed_input[0]));
+                        fprintf(stdout, "3) USER INPUTED %s \nPARSED INPUT[0] %s and LENGTH %lu\n", user_input, parsed_input[0], strlen(parsed_input[0]));
+
+                        fprintf(stdout, "4) parsed_input_array\n" );
+                        for (int i = 0; i<char_arg_len; i++) {
+                                printf("%s\n",parsed_input[i] );
+                        }
                 }
-
-                for (int i = 0; i<char_arg_len; i++) {
-                        printf("%s\n",parsed_input[i] );
-                }
-
-
 
                 if ((strcmp(parsed_input[0], "exit") == 0) && char_arg_len==1) {
                         /* the addr of the user_input must be passed to free
@@ -48,11 +47,10 @@ int main(void){
                         exit_cmd_handler(&user_input);
                 }
                 else if ((strcmp(parsed_input[0], "pwd") == 0) && char_arg_len==1)  {
-                        /* the current*/
                         pwd_cmd_handler();
                 }
                 else if ((strcmp(parsed_input[0], "cd") == 0) && char_arg_len==2)  {
-                        cd_cmd_handler(user_input);
+                        cd_cmd_handler(parsed_input[1]);
                 }
                 else if ((strcmp(parsed_input[0], "export") == 0) && char_arg_len==1) {
                         export_cmd_handler();
@@ -63,8 +61,6 @@ int main(void){
                 else {
                         printf("Command not recognized\n");
                 }
-
-
         }
         return 0;
 }
