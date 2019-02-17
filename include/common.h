@@ -12,10 +12,10 @@ typedef struct Node {
 } Node;
 
 /* func to add node to end of linked list */
-void push( struct Node * head, char cmd[MAX_INPUT_KWRD_LEN]);
+int push( struct Node *head, char cmd[MAX_INPUT_KWRD_LEN]);
 
 /* func to write contents of linked list starting with head
-  to the stream FILE *llptr*/
+   to the stream FILE *llptr*/
 void write_linked_list(struct Node *head, FILE *llptr);
 
 /* func to print the contents of the linked list with special formatting */
