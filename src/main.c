@@ -78,7 +78,7 @@ int main(void){
                         fclose(fptr);
                         /* the addr of the user_input must be passed to free
                            the calloced user_input*/
-                        exit_cmd_handler(&user_input);
+                        exit_cmd_handler(&user_input, head);
                 }
                 else if ((strcmp(parsed_input[0], "pwd") == 0) && char_arg_len==1)  {
                         pwd_cmd_handler();
