@@ -9,16 +9,29 @@
 #include <ctype.h>
 #include "common.h"
 #include "builtin_cmd_handler.h"
-#define MAX_INPUT_ARR_LEN 50 /* max number of cmd args entered each time*/
 
 /* Parser function */
 int parser(char *user_input, char *parsed_input[], size_t ui_length);
 
 /* function to handle the main loop of the cmd prompt */
 int main(void){
-        FILE *fptr = fopen("./history.txt", "a"); /* open history to read and save cmds to*/
+        FILE *fptr = fopen("./history.txt", "a+"); /* open history to read and append cmds to*/
         char *parsed_input[MAX_INPUT_ARR_LEN]; /* array of char ptrs to hold parsed input*/
         char *user_input = calloc(MAX_CMD_INPUT_BUFFER, sizeof(char));
+
+        /* A head node is initialized
+           whose contents are not present
+           and never read */
+        struct Node * head = NULL;
+        head = malloc(sizeof(Node));
+        if (head == NULL) {
+                printf("Out of memory\n");
+                return 1;
+        }
+        head->next = NULL;
+
+        /* load history.txt cmds in linked list buffer */
+        load_linked_list(head);
 
         // main while loop for shell
         while (1) {
@@ -41,7 +54,7 @@ int main(void){
                 }
 
                 /* Save each entered cmd to a history.txt file */
-                fprintf(fptr, "%s", user_input);
+                push(head, user_input);
 
                 /* Parse the user_input into a array of char ptrs holding user cmd args */
                 char_arg_len = parser(&user_input[0], parsed_input, strlen(user_input));
@@ -57,9 +70,11 @@ int main(void){
                 }
 
                 if ((strcmp(parsed_input[0], "exit") == 0) && char_arg_len==1) {
+                        /* Save the linked list into the history.txt file */
+                        traverse_linked_list_stream(head, fptr);
+                        fclose(fptr);
                         /* the addr of the user_input must be passed to free
                            the calloced user_input*/
-                        fclose(fptr);
                         exit_cmd_handler(&user_input);
                 }
                 else if ((strcmp(parsed_input[0], "pwd") == 0) && char_arg_len==1)  {
@@ -72,12 +87,16 @@ int main(void){
                         export_cmd_handler();
                 }
                 else if ((strcmp(parsed_input[0], "history") == 0) && char_arg_len==1)  {
-                        history_cmd_handler();
+                        /* Write into the history file before exiting */
+                        // traverse_linked_list_stream(head, stdout);
+                        history_cmd_handler( head );
                 }
                 else {
                         printf("Command not recognized\n");
                 }
+
         }
+        /* Control should not reach here */
         return 0;
 }
 
