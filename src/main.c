@@ -15,7 +15,8 @@ int parser(char *user_input, char *parsed_input[], size_t ui_length);
 
 /* function to handle the main loop of the cmd prompt */
 int main(void){
-        int number_of_args = 0; /* total number of args entered inc history.txt contents */
+        int number_of_args = 0; /* total number of args entered including history.txt contents */
+        int arg_order_exclamation = 0; /* arg order for exclamantion mark exec from history */
         FILE *fptr = fopen("./history.txt", "a+"); /* open history to read and append cmds to*/
         char *parsed_input[MAX_INPUT_ARR_LEN]; /* array of char ptrs to hold parsed input*/
         char *user_input = calloc(MAX_CMD_INPUT_BUFFER, sizeof(char));
@@ -46,7 +47,7 @@ int main(void){
                 printf(">> ");
 
                 /* Get user input and auto append \n at end */
-                if (fgets(user_input, MAX_CMD_INPUT_BUFFER, stdin) == NULL ) {
+                if (fgets(user_input, MAX_CMD_INPUT_BUFFER, stdin) == NULL) {
                         printf("Error getting user input\n");
                 }
 
@@ -56,19 +57,19 @@ int main(void){
                 }
 
                 /* Save each entered cmd to a history.txt file */
-                push(head, user_input);
-                number_of_args += 1;
+                if (push(head, user_input) == 0) {
+                        number_of_args += 1;
+                }
 
                 /* Parse the user_input into a array of char ptrs holding user cmd args */
                 char_arg_len = parser(&user_input[0], parsed_input, strlen(user_input));
 
                 // Debug info
                 if (DEBUG==1) {
-                        fprintf(stdout, "3) USER INPUTED %s \nPARSED INPUT[0] %s and LENGTH %lu\n", user_input, parsed_input[0], strlen(parsed_input[0]));
-
-                        fprintf(stdout, "4) parsed_input_array\n" );
+                        fprintf(stdout, "1) USER INPUT = %s \n",
+                                user_input);
                         for (int i = 0; i<char_arg_len; i++) {
-                                printf("%s\n",parsed_input[i] );
+                                printf("\t%d) %s, len = %lu\n", i+1, parsed_input[i], strlen(parsed_input[i]));
                         }
                 }
 
@@ -90,9 +91,25 @@ int main(void){
                         export_cmd_handler();
                 }
                 else if ((strcmp(parsed_input[0], "history") == 0) && char_arg_len==1)  {
-                        /* Write into the history file before exiting */
-                        // traverse_linked_list_stream(head, stdout);
+                        /* Write into the history file before exiting
+                           traverse_linked_list_stream(head, stdout); */
                         history_cmd_handler(number_of_args, head );
+                }
+                else if ((parsed_input[0][0] == '!') && char_arg_len==1 && (strlen(parsed_input[0]) > 1) ) {
+                        arg_order_exclamation = 0; /* reset to zero */
+                        /* loops through the chars of the cmd entered starting from the
+                           first pos and creates the arg order for exec in the history linked list */
+                        for (size_t i = 1; i < strlen(parsed_input[0]); i++) {
+                                if ( !(isdigit(parsed_input[0][i])) ) {
+                                        printf("ommand not recognized\n");
+                                        break;
+                                }
+                                arg_order_exclamation = (arg_order_exclamation * 10) +
+                                                        (parsed_input[0][i] - '0');
+                        }
+                        if (arg_order_exclamation > (number_of_args-1)) {
+                                printf("-shell: !%i: event not found\n", arg_order_exclamation);
+                        }
                 }
                 else {
                         printf("Command not recognized\n");
