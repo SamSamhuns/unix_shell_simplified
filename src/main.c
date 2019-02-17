@@ -21,19 +21,19 @@ int main(void){
         char *parsed_input[MAX_INPUT_ARR_LEN]; /* array of char ptrs to hold parsed input*/
         char *user_input = calloc(MAX_CMD_INPUT_BUFFER, sizeof(char));
 
-        /* A head node is initialized
+        /* A history_head node is initialized
            whose contents are not present
            and never read */
-        struct Node * head = NULL;
-        head = malloc(sizeof(Node));
-        if (head == NULL) {
+        struct Node * history_head = NULL;
+        history_head = malloc(sizeof(Node));
+        if (history_head == NULL) {
                 printf("Out of memory\n");
                 return 1;
         }
-        head->next = NULL;
+        history_head->next = NULL;
 
         /* load history.txt cmds in linked list buffer */
-        number_of_args = load_linked_list(head);
+        number_of_args = load_linked_list(history_head);
 
         // main while loop for shell
         while (1) {
@@ -57,7 +57,7 @@ int main(void){
                 }
 
                 /* Save each entered cmd to a history.txt file */
-                if (push(head, user_input) == 0) {
+                if (push(history_head, user_input) == 0) {
                         number_of_args += 1;
                 }
 
@@ -75,25 +75,25 @@ int main(void){
 
                 if ((strcmp(parsed_input[0], "exit") == 0) && char_arg_len==1) {
                         /* Save the linked list into the history.txt file */
-                        write_linked_list(head, fptr);
+                        write_linked_list(history_head, fptr);
                         fclose(fptr);
                         /* the addr of the user_input must be passed to free
                            the calloced user_input*/
-                        exit_cmd_handler(&user_input, head);
+                        exit_cmd_handler(&user_input, history_head);
                 }
-                else if ((strcmp(parsed_input[0], "pwd") == 0) && char_arg_len==1)  {
+                else if ((strcmp(parsed_input[0], "pwd") == 0) && char_arg_len == 1)  {
                         pwd_cmd_handler();
                 }
-                else if ((strcmp(parsed_input[0], "cd") == 0) && char_arg_len<=2)  {
+                else if ((strcmp(parsed_input[0], "cd") == 0) && char_arg_len <= 2)  {
                         cd_cmd_handler(parsed_input[1]);
                 }
-                else if ((strcmp(parsed_input[0], "export") == 0) && char_arg_len==1) {
+                else if ((strcmp(parsed_input[0], "export") == 0) && char_arg_len == 1) {
                         export_cmd_handler();
                 }
-                else if ((strcmp(parsed_input[0], "history") == 0) && char_arg_len==1)  {
+                else if ((strcmp(parsed_input[0], "history") == 0) && char_arg_len == 1)  {
                         /* Write into the history file before exiting
-                           traverse_linked_list_stream(head, stdout); */
-                        history_cmd_handler(number_of_args, head );
+                           history_cmd_handler(history_head, stdout); */
+                        history_cmd_handler(number_of_args, history_head);
                 }
                 else if ((parsed_input[0][0] == '!') && char_arg_len==1 && (strlen(parsed_input[0]) > 1) ) {
                         arg_order_exclamation = 0; /* reset to zero */
@@ -107,9 +107,16 @@ int main(void){
                                 arg_order_exclamation = (arg_order_exclamation * 10) +
                                                         (parsed_input[0][i] - '0');
                         }
-                        if (arg_order_exclamation > (number_of_args-1)) {
+                        if (arg_order_exclamation > (number_of_args)) {
                                 printf("-shell: !%i: event not found\n", arg_order_exclamation);
                         }
+                }
+                /* if export is called just to display env vars */
+                else if ((strcmp(parsed_input[0], "export")) && char_arg_len == 1) {
+                        continue;
+                }
+                else if ((strcmp(parsed_input[0], "export")) && char_arg_len > 1) {
+                        continue;
                 }
                 else {
                         printf("Command not recognized\n");
