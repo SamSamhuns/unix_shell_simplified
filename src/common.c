@@ -19,8 +19,9 @@ void push( struct Node *head, char cmd[MAX_INPUT_KWRD_LEN]) {
 }
 
 /* function to taverse through linked list and output to stream*/
-void traverse_linked_list_stream(struct Node *head, FILE *llptr) {
+void write_linked_list(struct Node *head, FILE *llptr) {
         struct Node *cur = head;
+
         while ( cur->next != NULL ) {
                 cur = cur->next;
                 /* Write into the file ptr */
@@ -28,18 +29,43 @@ void traverse_linked_list_stream(struct Node *head, FILE *llptr) {
         }
 }
 
-/* function to load history.txt cmds */
-void load_linked_list (struct Node *head) {
+/* function to taverse through linked list and output to stream*/
+void print_linked_list( int number_of_args, struct Node *head) {
+        struct Node *cur = head;
+        int arg_order = 1;
+        int number_buffer = 1;
+
+        number_of_args /= 10;
+        while ( number_of_args > 0) {
+                number_of_args /= 10;
+                number_buffer += 1;
+        }
+
+        while ( cur->next != NULL ) {
+                cur = cur->next;
+                /* Write into the file ptr */
+                /* Setting the width with a var number_buffer to format output*/
+                fprintf( stdout, "%*d %s", number_buffer, arg_order, cur->content);
+                arg_order++;
+        }
+}
+
+/* function to load history.txt cmds
+   returns the number of args present in the history.txt file */
+int load_linked_list (struct Node *head) {
+        int number_of_args = 0;
         FILE *read_fptr;
         char temp_cmd_buffer[MAX_INPUT_KWRD_LEN];
 
         /* if the file does not exist*/
         if ((read_fptr = fopen("./history.txt", "r")) == NULL) {
-          printf("Error Opening File history.txt");
-          exit(1);
+                printf("Error Opening File history.txt");
+                exit(1);
         }
 
         while ( fgets(temp_cmd_buffer, MAX_INPUT_KWRD_LEN, read_fptr)) {
                 push(head, temp_cmd_buffer);
+                number_of_args++;
         }
+        return number_of_args;
 }
