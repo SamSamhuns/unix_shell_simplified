@@ -25,5 +25,7 @@ void print_linked_list( int number_of_args, struct Node *head);
    returns the number of args present in the history.txt file */
 int load_linked_list (struct Node *head);
 
+/* func to free memory allocated inside the linked lists */
+void free_linked_list (struct Node *head);
 
 #endif
