@@ -1,5 +1,5 @@
 # unix_shell_simplified
-This is an implementation of a simplified version of the UNIX SHELL using C.
+This is an implementation of a simplified version of the UNIX SHELL using C. The current implementation only includes the built-in `pwd`, `cd`, `history`, `export` and `exit` functions.
 
 ## Requirements
 This shell can only be built in Mac OS and Linux/UNIX based systems.
@@ -7,6 +7,16 @@ This shell can only be built in Mac OS and Linux/UNIX based systems.
 ## Build (OSX & UNIX/Linux)
 ```shell
 $ make all
+```
+
+## Run
+```shell
+$ ./shell
+```
+
+### Clean build artifacts
+```shell
+$ make clean
 ```
 
 ## Author
