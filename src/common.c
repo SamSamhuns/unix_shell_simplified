@@ -5,8 +5,23 @@
 #include "common.h"
 #include "builtin_cmd_handler.h"
 
-/* function to add node to the end of the linked list*/
-void push( struct Node *head, char cmd[MAX_INPUT_KWRD_LEN]) {
+/* function to add node to the end of the linked list
+   returns -1 if an ! is enocuntered first otherwise returns 0 */
+int push( struct Node *head, char cmd[MAX_INPUT_KWRD_LEN]) {
+        /* Check for the first appearing exclamation mark */
+        for (size_t i = 0; i < MAX_INPUT_KWRD_LEN; i++) {
+                if (cmd[i] == ' ') {
+                        continue;
+                }
+                else {
+                        /* for exclamantion do not write to history linked list */
+                        if (cmd[i] == '!') {
+                                return -1;
+                        }
+                        break;
+                }
+        }
+
         struct Node *cur = head;
         /* loop until the end of the linked list */
         while ( cur->next != NULL ) {
@@ -15,7 +30,7 @@ void push( struct Node *head, char cmd[MAX_INPUT_KWRD_LEN]) {
         cur->next = malloc(sizeof(Node));
         strcpy(cur->next->content, cmd);
         cur->next->next = NULL;
-
+        return 0;
 }
 
 /* function to taverse through linked list and output to stream*/
