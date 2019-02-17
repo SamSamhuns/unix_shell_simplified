@@ -15,6 +15,7 @@ int parser(char *user_input, char *parsed_input[], size_t ui_length);
 
 /* function to handle the main loop of the cmd prompt */
 int main(void){
+        int number_of_args = 0; /* total number of args entered inc history.txt contents */
         FILE *fptr = fopen("./history.txt", "a+"); /* open history to read and append cmds to*/
         char *parsed_input[MAX_INPUT_ARR_LEN]; /* array of char ptrs to hold parsed input*/
         char *user_input = calloc(MAX_CMD_INPUT_BUFFER, sizeof(char));
@@ -31,11 +32,12 @@ int main(void){
         head->next = NULL;
 
         /* load history.txt cmds in linked list buffer */
-        load_linked_list(head);
+        number_of_args = load_linked_list(head);
 
         // main while loop for shell
         while (1) {
                 int char_arg_len = 0;
+
                 // Checking if memory is available in the heap
                 if (user_input == NULL) {
                         printf("Out of memory\n" );
@@ -55,6 +57,7 @@ int main(void){
 
                 /* Save each entered cmd to a history.txt file */
                 push(head, user_input);
+                number_of_args += 1;
 
                 /* Parse the user_input into a array of char ptrs holding user cmd args */
                 char_arg_len = parser(&user_input[0], parsed_input, strlen(user_input));
@@ -71,7 +74,7 @@ int main(void){
 
                 if ((strcmp(parsed_input[0], "exit") == 0) && char_arg_len==1) {
                         /* Save the linked list into the history.txt file */
-                        traverse_linked_list_stream(head, fptr);
+                        write_linked_list(head, fptr);
                         fclose(fptr);
                         /* the addr of the user_input must be passed to free
                            the calloced user_input*/
@@ -89,7 +92,7 @@ int main(void){
                 else if ((strcmp(parsed_input[0], "history") == 0) && char_arg_len==1)  {
                         /* Write into the history file before exiting */
                         // traverse_linked_list_stream(head, stdout);
-                        history_cmd_handler( head );
+                        history_cmd_handler(number_of_args, head );
                 }
                 else {
                         printf("Command not recognized\n");
