@@ -69,3 +69,15 @@ int load_linked_list (struct Node *head) {
         }
         return number_of_args;
 }
+
+/* func to free memory allocated inside the linked lists */
+void free_linked_list (struct Node *head) {
+        struct Node *cur = head;
+
+        while (cur != NULL ) {
+                struct Node *temp = cur;
+                cur = cur->next;
+                free (temp);
+        }
+        head = NULL;
+}
