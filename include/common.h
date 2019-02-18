@@ -26,6 +26,16 @@ void print_linked_list_history( int number_of_args, struct Node *head);
 int load_linked_list_history(struct Node *head);
 
 /* func to free memory allocated inside the linked lists */
-void free_linked_list_history(struct Node *head);
+void free_linked_list(struct Node *head);
+
+/* function to add a node to end of the linked list */
+void push(struct Node *head, char cmd[MAX_INPUT_KWRD_LEN]);
+
+/* function to print the contents of the export linked list head */
+void print_linked_list_export(struct Node *head);
+
+/* pushes new env vars entered using export into export_head */
+int push_export( struct Node *head, char env_name_value_comb[MAX_INPUT_KWRD_LEN], char env_var_name[MAX_INPUT_KWRD_LEN],
+                 char env_var_value[MAX_INPUT_KWRD_LEN]) ;
 
 #endif
