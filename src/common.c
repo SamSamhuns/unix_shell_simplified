@@ -7,7 +7,7 @@
 
 /* function to add node to the end of the linked list
    returns -1 if an ! is enocuntered first otherwise returns 0 */
-int push( struct Node *head, char cmd[MAX_INPUT_KWRD_LEN]) {
+int push_history( struct Node *head, char cmd[MAX_INPUT_KWRD_LEN]) {
         /* Check for the first appearing exclamation mark */
         for (size_t i = 0; i < MAX_INPUT_KWRD_LEN; i++) {
                 if (cmd[i] == ' ') {
@@ -34,7 +34,7 @@ int push( struct Node *head, char cmd[MAX_INPUT_KWRD_LEN]) {
 }
 
 /* function to taverse through linked list and output to stream*/
-void write_linked_list(struct Node *head, FILE *llptr) {
+void write_linked_list_history(struct Node *head, FILE *llptr) {
         struct Node *cur = head;
 
         while ( cur->next != NULL ) {
@@ -45,7 +45,7 @@ void write_linked_list(struct Node *head, FILE *llptr) {
 }
 
 /* function to taverse through linked list and output to stream*/
-void print_linked_list( int number_of_args, struct Node *head) {
+void print_linked_list_history(int number_of_args, struct Node *head) {
         struct Node *cur = head;
         int arg_order = 1;
         int number_buffer = 1;
@@ -67,7 +67,7 @@ void print_linked_list( int number_of_args, struct Node *head) {
 
 /* function to load history.txt cmds
    returns the number of args present in the history.txt file */
-int load_linked_list (struct Node *head) {
+int load_linked_list_history(struct Node *head) {
         int number_of_args = 0;
         FILE *read_fptr;
         char temp_cmd_buffer[MAX_INPUT_KWRD_LEN];
@@ -79,14 +79,14 @@ int load_linked_list (struct Node *head) {
         }
 
         while ( fgets(temp_cmd_buffer, MAX_INPUT_KWRD_LEN, read_fptr)) {
-                push(head, temp_cmd_buffer);
+                push_history(head, temp_cmd_buffer);
                 number_of_args++;
         }
         return number_of_args;
 }
 
 /* func to free memory allocated inside the linked lists */
-void free_linked_list (struct Node *head) {
+void free_linked_list_history(struct Node *head) {
         struct Node *cur = head;
 
         while (cur != NULL ) {
