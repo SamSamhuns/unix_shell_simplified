@@ -132,7 +132,7 @@ int push_export( struct Node *head, char env_name_value_comb[MAX_INPUT_KWRD_LEN]
                 /* if the var names are equal in the saved export_linked_list and the user cmd */
                 if (strcmp(env_var_array[0], env_var_name) == 0) {
                         /* if existing var name has NULL val. i.e. PATH= */
-                        if (env_var_array[1] == NULL) {
+                        if (env_var_array[1] == NULL || env_var_value == NULL ) {
                                 strcpy(cur->content, env_name_value_comb);
                                 return 0;
                         }
