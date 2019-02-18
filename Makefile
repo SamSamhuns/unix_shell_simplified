@@ -2,7 +2,7 @@ IDIR =include# directory for header files
 SDIR =src# source directory
 ODIR =obj# object file directory
 CC = gcc# compiler used
-CFLAGS = -Wall -Wshadow -Werror -I$(IDIR)# compiler flags
+CFLAGS = -std=c99 -Wall -Wshadow -Werror -I$(IDIR)# compiler flags
 LDFLAGS =# -lm library flags
 TARGET = shell # file executable generated
 
