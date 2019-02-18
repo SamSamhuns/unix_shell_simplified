@@ -7,5 +7,5 @@
 /* function to handle cmd history*/
 void history_cmd_handler(int number_of_args, struct Node *head ) {
         /* func to print to stdout the contens of the linked list */
-        print_linked_list(number_of_args, head);
+        print_linked_list_history(number_of_args, head);
 }
