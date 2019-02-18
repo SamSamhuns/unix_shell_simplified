@@ -7,15 +7,16 @@
 #include <stdlib.h>
 #include <string.h>
 #include <ctype.h>
+#include <dirent.h>
 #include "common.h"
 #include "builtin_cmd_handler.h"
 
-/* Parser function */
+
 int parser(char *user_input, char *parsed_input[], size_t ui_length);
-char *exclaim_cmd_handler(struct Node *head, int arg_order_exclamation);
 void run_command (int char_arg_len, int arg_order_exclamation, int number_of_args, struct Node *history_head,
                   struct Node *export_head, FILE *fptr, char *user_input, char *parsed_input[] );
-
+int search_dir (char *dir_path, char *parsed_arr[], int char_arg_len);
+int search_in_export_path( struct Node *head, char *parsed_arr[], int char_arg_len );
 
 /* function to handle the main loop of the cmd prompt */
 int main(void){
@@ -39,9 +40,9 @@ int main(void){
         history_head->next = NULL;
         export_head->next = NULL;
         strcpy(export_head->content, "PATH=");
-        // printf("%s %lu\n", export_head->content, strlen(export_head->content));
 
-        /* load history.txt cmds in linked list buffer */
+        /* load history.txt cmds in linked list buffer
+           load func returns number of args that have been loaded */
         number_of_args = load_linked_list_history(history_head);
 
         // main while loop for shell
@@ -91,21 +92,15 @@ int main(void){
 void run_command (int char_arg_len, int arg_order_exclamation, int number_of_args, struct Node *history_head,
                   struct Node *export_head, FILE *fptr, char *user_input, char *parsed_input[] ) {
         if ((strcmp(parsed_input[0], "exit") == 0) && char_arg_len==1) {
-                /* Save the linked list into the history.txt file */
-                write_linked_list_history(history_head, fptr);
-                fclose(fptr);
                 /* the addr of the user_input must be passed to free
                    the calloced user_input*/
-                exit_cmd_handler(&user_input, history_head);
+                exit_cmd_handler(&user_input, history_head, export_head, fptr);
         }
         else if ((strcmp(parsed_input[0], "pwd") == 0) && char_arg_len == 1)  {
                 pwd_cmd_handler();
         }
         else if ((strcmp(parsed_input[0], "cd") == 0) && char_arg_len <= 2)  {
                 cd_cmd_handler(parsed_input[1]);
-        }
-        else if ((strcmp(parsed_input[0], "export") == 0) && char_arg_len == 1) {
-                export_cmd_handler();
         }
         else if ((strcmp(parsed_input[0], "history") == 0) && char_arg_len == 1)  {
                 /* Write into the history file before exiting
@@ -127,27 +122,96 @@ void run_command (int char_arg_len, int arg_order_exclamation, int number_of_arg
                 }
                 if ((arg_order_exclamation > number_of_args) || arg_order_exclamation == 0) {
                         printf("-shell: !%i: event not found\n", arg_order_exclamation);
-                        return;
+                        return; /* Do not proceed if event was not found */
                 }
                 /* Recursive call here (Only happens once) */
-                char *exclaim_parsed_input[MAX_INPUT_ARR_LEN];
+                static char *exclaim_parsed_input[MAX_INPUT_ARR_LEN];
                 strcpy(user_input, exclaim_cmd_handler(history_head, arg_order_exclamation));
+                /* returns the total number of args entered for the choosen cmd from history */
                 char_arg_len = parser(user_input, exclaim_parsed_input, strlen(user_input));
 
                 run_command(char_arg_len, arg_order_exclamation, number_of_args,
                             history_head, export_head, fptr, user_input, exclaim_parsed_input);
         }
         /* if export is called just to display env vars */
-        else if ((strcmp(parsed_input[0], "export")) && char_arg_len == 1) {
-                return;
+        else if ((strcmp(parsed_input[0], "export") == 0) && char_arg_len == 1) {
+                print_env_export_handler(export_head);
         }
-        else if ((strcmp(parsed_input[0], "export")) && char_arg_len > 1) {
-                return;
+        /* if export is called to save an env var */
+        else if ((strcmp(parsed_input[0], "export") == 0) && char_arg_len > 1) {
+                /* save func returns 0 for success and -1 for failure */
+                if (save_env_export_handler(parsed_input,
+                                            char_arg_len, export_head) == -1) {
+                        printf("Export var is illegal\n");
+                }
         }
         else {
-                printf("Command not recognized\n");
+                if (search_in_export_path(export_head, parsed_input, char_arg_len) == -1) {
+                        printf("Command not recognized\n");
+                }
+        }
+}
+
+int search_in_export_path( struct Node *head, char *parsed_arr[], int char_arg_len ) {
+        struct Node *cur = head;
+        while (cur != NULL) {
+                static char *export_var_array[2];
+                static char *export_var_array_paths[MAX_INPUT_KWRD_LEN];
+                int num_of_paths = 0;
+                int path_iter = 0;
+                static char temp_store[MAX_INPUT_KWRD_LEN];
+
+                strcpy(temp_store, cur->content);
+                export_var_array[0] = strtok(temp_store, "=");
+                export_var_array[1] = strtok(NULL, "=");
+                if (export_var_array[1] == NULL) {
+                        cur = cur->next;
+                        continue;
+                }
+
+                export_var_array_paths[path_iter] = strtok(export_var_array[1], ":");
+                while (export_var_array_paths[path_iter] != NULL) {
+                        num_of_paths++;
+                        export_var_array_paths[++path_iter] = strtok(NULL, ":");
+                }
+
+                for (size_t i = 0; i < num_of_paths; i++) {
+                        if (search_dir(export_var_array_paths[i], parsed_arr, char_arg_len) == 0) {
+                                return 0;
+                        }
+                }
+                cur = cur->next;
+        }
+        return -1;
+}
+
+int search_dir (char *dir_path, char *parsed_arr[], int char_arg_len) {
+        struct dirent *dir_entry; // define struct for a ptr for entering directory
+        DIR *dir_read = opendir(dir_path); // returns a ptr of type DIR
+
+        /* if the directory specified by the path couldn't be opened */
+        if (dir_read == NULL) {
+                printf("Error: could not open path directory\n");
+                return -1;
         }
 
+        while ((dir_entry = readdir(dir_read)) != NULL) {
+                if ((strcmp(dir_entry->d_name, parsed_arr[0])) == 0) {
+                        /* PRINT IMPORTANT STUFF HERE */
+                        strcat(dir_path, "/");
+                        strcat(dir_path, parsed_arr[0]);
+                        printf("%s is an external command (%s)\n", parsed_arr[0], dir_path);
+                        if (char_arg_len > 1) {
+                                printf("command arguments:\n");
+                                for (size_t i = 1; i < char_arg_len; i++) {
+                                        printf("%s\n", parsed_arr[i]);
+                                }
+                        }
+                        return 0;
+                }
+        }
+        closedir(dir_read);
+        return -1;
 }
 
 
@@ -172,22 +236,12 @@ int parser(char *user_input, char *parsed_arr[], size_t ui_length) {
                 char_arg_len++;
                 parsed_arr[++ptr_pos] = strtok(NULL, " ");
         }
-        return char_arg_len;
-}
 
-/* run cmd from history selected by ! */
-char *exclaim_cmd_handler(struct Node *head, int arg_order_exclamation) {
-        int arg_iterator = 0;
-        struct Node *cur = head;
-        while ( cur != NULL ) {
-                if (arg_iterator == arg_order_exclamation) {
-                        return (cur->content);
-                        break;
+        // DEBUG Code
+        if (DEBUG == 1) {
+                for (size_t i = 0; i < char_arg_len; i++) {
+                        printf("\t%zu) %s\n", i, parsed_arr[i]);
                 }
-                cur = cur->next;
-                arg_iterator++;
         }
-        /* Control should not reach here because of the "(arg_order_exclamation > number_of_args)"
-           check inside the run_command(...) func */
-        return NULL;
+        return char_arg_len; /* return number of space separated cmd parts entered */
 }
