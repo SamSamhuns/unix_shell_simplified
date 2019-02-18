@@ -1,9 +1,9 @@
 #ifndef COMMON_H // Making sure the header files are not included twice
 #define COMMON_H
 
-#define MAX_CMD_INPUT_BUFFER 500
-#define MAX_INPUT_ARR_LEN 50 /* max number of cmd args entered each time*/
-#define MAX_INPUT_KWRD_LEN 300 /* max len of each cmd line arg */
+#define MAX_CMD_INPUT_BUFFER 600
+#define MAX_INPUT_ARR_LEN 60 /* max number of cmd args entered each time*/
+#define MAX_INPUT_KWRD_LEN 350 /* max len of each cmd line arg */
 #define DEBUG 0
 
 typedef struct Node {
