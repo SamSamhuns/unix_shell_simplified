@@ -189,7 +189,7 @@ int search_in_export_path( struct Node *head, char *parsed_arr[], int char_arg_l
 
                 for (size_t i = 0; i < num_of_paths; i++) {
                         /* Add a front slash if it is not present in the path name */
-                        if ( export_var_array_paths[i][strlen(export_var_array_paths[i])] != '/' ) {
+                        if ( export_var_array_paths[i][strlen(export_var_array_paths[i])-1] != '/' ) {
                                 strcat(export_var_array_paths[i], "/");
                         }
                         if (search_dir(export_var_array_paths[i], parsed_arr, char_arg_len) == 0) {
@@ -217,7 +217,6 @@ int search_dir (char *dir_path, char *parsed_arr[], int char_arg_len) {
                 if ((strcmp(dir_entry->d_name, parsed_arr[0])) == 0) {
                         /* PRINTING EXTERN CMDS HERE */
                         // strcat(dir_path, "/");
-                        printf("%s\n", dir_path);
                         strcat(dir_path, parsed_arr[0]);
                         printf("%s is an external command (%s)\n", parsed_arr[0], dir_path);
                         if (char_arg_len > 1) {
