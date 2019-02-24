@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <dirent.h>
 #include "cd.h"
 #include "pwd.h"
@@ -34,6 +35,7 @@ int main(void){
         FILE *fptr = fopen("./history.txt", "a+"); /* open history to read and append cmds to*/
         char *parsed_input[MAX_INPUT_ARR_LEN]; /* array of char ptrs to hold parsed input*/
         char *user_input = calloc(MAX_CMD_INPUT_BUFFER, sizeof(char));
+        char initial_pwd_value[MAX_CMD_INPUT_BUFFER+10] = "PWD="; /* string to hold the starting working dir*/
 
         /* A history_head and a export_head node is initialized
            whoich is equal to NULL */
@@ -41,13 +43,17 @@ int main(void){
         struct Node *export_head = NULL;
         history_head = malloc(sizeof(Node));
         export_head = malloc(sizeof(Node));
-        if (history_head == NULL || export_head == NULL) {
+        history_head->next = NULL;
+        export_head->next = malloc(sizeof(Node));
+
+        if (history_head == NULL || export_head == NULL || export_head->next == NULL ) {
                 printf("Out of memory\n");
                 return 1;
         }
-        history_head->next = NULL;
-        export_head->next = NULL;
+
         strcpy(export_head->content, "PATH=");
+        getcwd(user_input, MAX_CMD_INPUT_BUFFER);
+        strcpy(export_head->next->content, strcat(initial_pwd_value, user_input));
 
         /* load history.txt cmds in linked list buffer
            load func returns number of args that have been loaded */
@@ -106,7 +112,7 @@ void run_command (int char_arg_len, int arg_order_exclamation, int number_of_arg
                 exit_cmd_handler(&user_input, history_head, export_head, fptr);
         }
         else if ((strcmp(parsed_input[0], "pwd") == 0) && char_arg_len == 1)  {
-                pwd_cmd_handler();
+                pwd_cmd_handler(export_head);
         }
         else if ((strcmp(parsed_input[0], "cd") == 0) && char_arg_len <= 2)  {
                 cd_cmd_handler(parsed_input[1]);
