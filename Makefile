@@ -10,16 +10,22 @@ TARGET = shell # file executable generated
 SOURCES := $(wildcard $(SDIR)/*.c)
 OBJECTS := $(patsubst $(SDIR)/%.c, $(ODIR)/%.o, $(SOURCES))
 
-# Listing the header files
-_DEPS = builtin_cmd_handler.h common.h # dependency header files
+# TO manually list the header files
+# _DEPS = common.h # dependency header files
+
+# Getting the list of header files
+HEADERS = $(wildcard $(IDIR)/*.h)
+
+# To print the value of a variable
+# $(info    VAR is $(HEADERS))
 
 # Pattern substitution
 # $(patsubst pattern, substitution, text_to_insert)
-DEPS = $(patsubst %,$(IDIR)/%,$(_DEPS))
+# DEPS = $(patsubst %,$(IDIR)/%,$(_DEPS))
 
 all : $(TARGET)
 
-$(ODIR)/%.o: $(SDIR)/%.c $(DEPS)
+$(ODIR)/%.o: $(SDIR)/%.c $(HEADERS)
 	@mkdir -p $(@D)
 	$(CC) -c -o $@ $< $(CFLAGS)
 
