@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include "common.h"
-#include "builtin_cmd_handler.h"
+#include "cd.h"
 
 /* function to handle cmd cd*/
 void cd_cmd_handler(char *arr){

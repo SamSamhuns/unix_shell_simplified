@@ -3,7 +3,6 @@
 #include <stdio.h>
 #include <unistd.h>
 #include "common.h"
-#include "builtin_cmd_handler.h"
 
 /* function to add a node to end of the linked list */
 void push(struct Node *head, char cmd[MAX_INPUT_KWRD_LEN]) {

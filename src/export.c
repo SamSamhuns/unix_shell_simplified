@@ -3,7 +3,7 @@
 #include <string.h>
 #include <unistd.h>
 #include "common.h"
-#include "builtin_cmd_handler.h"
+#include "export.h"
 
 /* function to handle cmd export env prints */
 void print_env_export_handler(struct Node *export_head) {

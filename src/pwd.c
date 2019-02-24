@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include "common.h"
-#include "builtin_cmd_handler.h"
+#include "pwd.h"
 
 /* function to handle cmd pwd*/
 void pwd_cmd_handler(){

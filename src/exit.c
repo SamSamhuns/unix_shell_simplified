@@ -2,7 +2,7 @@
 #include <stdio.h>
 #include <unistd.h>
 #include "common.h"
-#include "builtin_cmd_handler.h"
+#include "exit.h"
 
 // function to handle exit statements
 void exit_cmd_handler(char **user_input_ptr,
