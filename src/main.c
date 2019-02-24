@@ -3,13 +3,18 @@
    Author Samridha Shrestha
    Feb 2019
  */
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <ctype.h>
 #include <dirent.h>
+#include "cd.h"
+#include "pwd.h"
+#include "exit.h"
+#include "export.h"
 #include "common.h"
-#include "builtin_cmd_handler.h"
+#include "history.h"
+
 
 /* main parser func that returns the number of cmd args entered by the user */
 int parser(char *user_input, char *parsed_input[], size_t ui_length);
