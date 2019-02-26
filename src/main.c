@@ -16,9 +16,8 @@
 #include "common.h"
 #include "history.h"
 
-
 /* main parser func that returns the number of cmd args entered by the user */
-int parser(char *user_input, char *parsed_input[], size_t ui_length);
+int parser(char *user_input, char *parsed_input[], size_t ui_length, struct Node *export_head);
 /* main cmd executing func that runs the right built-in or extern cmd */
 void run_command (int char_arg_len, int arg_order_exclamation, int number_of_args, struct Node *history_head,
                   struct Node *export_head, FILE *fptr, char *user_input, char *parsed_input[] );
@@ -26,6 +25,10 @@ void run_command (int char_arg_len, int arg_order_exclamation, int number_of_arg
 int search_dir (char *dir_path, char *parsed_arr[], int char_arg_len);
 /* func to search for cmd in the ENV vars saved by the export func */
 int search_in_export_path( struct Node *head, char *parsed_arr[], int char_arg_len );
+/* returns replaced instances of cmd args where $VAR_NAME replaced with the env var value */
+char *parse_env_var_call(char *cmd_argument, int cmd_len, struct Node * export_head);
+
+int fork_and_execv (char *dir_path, char *parsed_arr[]);
 
 /* function to handle the main loop of the cmd prompt */
 int main(void){
@@ -84,7 +87,7 @@ int main(void){
                 }
 
                 /* Parse the user_input into a array of char ptrs holding user cmd args */
-                char_arg_len = parser(&user_input[0], parsed_input, strlen(user_input));
+                char_arg_len = parser(&user_input[0], parsed_input, strlen(user_input), export_head);
 
                 // Debug info
                 if (DEBUG==1) {
@@ -112,10 +115,10 @@ void run_command (int char_arg_len, int arg_order_exclamation, int number_of_arg
                 exit_cmd_handler(&user_input, history_head, export_head, fptr);
         }
         else if ((strcmp(parsed_input[0], "pwd") == 0) && char_arg_len == 1)  {
-                pwd_cmd_handler(export_head);
+                pwd_cmd_handler();
         }
         else if ((strcmp(parsed_input[0], "cd") == 0) && char_arg_len <= 2)  {
-                cd_cmd_handler(parsed_input[1]);
+                cd_cmd_handler(parsed_input[1], export_head);
         }
         else if ((strcmp(parsed_input[0], "history") == 0) && char_arg_len == 1)  {
                 /* Write into the history file before exiting
@@ -143,7 +146,7 @@ void run_command (int char_arg_len, int arg_order_exclamation, int number_of_arg
                 static char *exclaim_parsed_input[MAX_INPUT_ARR_LEN];
                 strcpy(user_input, exclaim_cmd_handler(history_head, arg_order_exclamation));
                 /* returns the total number of args entered for the choosen cmd from history */
-                char_arg_len = parser(user_input, exclaim_parsed_input, strlen(user_input));
+                char_arg_len = parser(user_input, exclaim_parsed_input, strlen(user_input), export_head);
 
                 run_command(char_arg_len, arg_order_exclamation, number_of_args,
                             history_head, export_head, fptr, user_input, exclaim_parsed_input);
@@ -162,7 +165,7 @@ void run_command (int char_arg_len, int arg_order_exclamation, int number_of_arg
         }
         else {
                 /* if no matching cmds found check if the cmd is external
-                  -1 return for an unrecognized program */
+                   -1 return for an unrecognized program */
                 if (search_in_export_path(export_head, parsed_input, char_arg_len) == -1) {
                         printf("Command not recognized\n");
                 }
@@ -170,17 +173,17 @@ void run_command (int char_arg_len, int arg_order_exclamation, int number_of_arg
 }
 
 /* func to search for cmd in the ENV vars saved by the export func
-  returns 0 for successful find and -1 for failure */
+   returns 0 for successful find and -1 for failure */
 int search_in_export_path( struct Node *head, char *parsed_arr[], int char_arg_len ) {
         struct Node *cur = head;
         while (cur != NULL) {
                 static char *export_var_array[2]; /* To hold env var name and value */
                 static char *export_var_array_paths[MAX_INPUT_KWRD_LEN]; /* to hold
-                  different paths in the env var values */
+                                                                            different paths in the env var values */
                 int num_of_paths = 0; /* number of paths in the env_var */
                 int path_iter = 0; /* for iteration splitting using strtok */
                 static char temp_store[MAX_INPUT_KWRD_LEN]; /* temp store to make contents
-                  of the export linked list are not modified */
+                                                               of the export linked list are not modified */
 
                 strcpy(temp_store, cur->content);
                 export_var_array[0] = strtok(temp_store, "=");
@@ -191,7 +194,7 @@ int search_in_export_path( struct Node *head, char *parsed_arr[], int char_arg_l
                 }
 
                 /* split using the colon as the delimiter and store it in
-                  export_var_array_paths */
+                   export_var_array_paths */
                 export_var_array_paths[path_iter] = strtok(export_var_array[1], ":");
                 while (export_var_array_paths[path_iter] != NULL) {
                         num_of_paths++;
@@ -199,11 +202,17 @@ int search_in_export_path( struct Node *head, char *parsed_arr[], int char_arg_l
                 }
 
                 for (size_t i = 0; i < num_of_paths; i++) {
+                        /* temp_path_holder is required as doing strcat to export_var_array_paths elems
+                           destroys the later elements of the export_var_array_paths char ptr array*/
+                        char temp_path_holder[MAX_CMD_INPUT_BUFFER];
+
+                        strcpy(temp_path_holder, export_var_array_paths[i]);
                         /* Add a front slash if it is not present in the path name */
-                        if ( export_var_array_paths[i][strlen(export_var_array_paths[i])-1] != '/' ) {
-                                strcat(export_var_array_paths[i], "/");
+                        if ( temp_path_holder[strlen(export_var_array_paths[i])-1] != '/' ) {
+                                strcat(temp_path_holder, "/");
                         }
-                        if (search_dir(export_var_array_paths[i], parsed_arr, char_arg_len) == 0) {
+
+                        if (search_dir(temp_path_holder, parsed_arr, char_arg_len) == 0) {
                                 return 0;
                         }
                 }
@@ -213,10 +222,12 @@ int search_in_export_path( struct Node *head, char *parsed_arr[], int char_arg_l
 }
 
 /* searches for parsed_arr[0] file in the path dir_path
-  returns 0 for sucessful find and -1 for failure */
+   returns 0 for sucessful find and -1 for failure */
 int search_dir (char *dir_path, char *parsed_arr[], int char_arg_len) {
         struct dirent *dir_entry; // define struct for a ptr for entering directory
         DIR *dir_read = opendir(dir_path); // returns a ptr of type DIR
+        pid_t pid, wait_pid; // to hold process pids
+        int status = 0;
 
         /* if the directory specified by the path couldn't be opened */
         if (dir_read == NULL) {
@@ -224,19 +235,61 @@ int search_dir (char *dir_path, char *parsed_arr[], int char_arg_len) {
                 return -1;
         }
 
+        /* Adding a NULL ptr to the end of parsed_arr for argv being sent to excev */
+        parsed_arr[char_arg_len] = NULL;
+
+        if ( (parsed_arr[0][0] == '.' && parsed_arr[0][1] == '/') || parsed_arr[0][0] == '/') {
+                pid = fork();
+                if (pid < 0) {
+                        printf("Fork error\n");
+                        return -1;
+                }
+                /* inside the CHILD, load a new c file using execv call */
+                else if (pid == 0) {
+                        if (execv(parsed_arr[0], parsed_arr) == -1) {
+                                fprintf(stdout, "ececv couldn't load %s\n", parsed_arr[0]);
+                        }
+                        return -1;
+                }
+                /* inside the PARENT */
+                else {
+                        /* Parent waits till all child processes have been reaped
+                           wait_pid will be < 0 once all child processes have terminated */
+                        while ((wait_pid = wait(&status)) > 0);
+                        return 0;
+                }
+        }
+
         while ((dir_entry = readdir(dir_read)) != NULL) {
                 if ((strcmp(dir_entry->d_name, parsed_arr[0])) == 0) {
-                        /* PRINTING EXTERN CMDS HERE */
-                        // strcat(dir_path, "/");
+
+                        /* EXECV OPERATION */
+                        // parsed_arr[0] is the external cmd that has been entered i.e. ls
                         strcat(dir_path, parsed_arr[0]);
-                        printf("%s is an external command (%s)\n", parsed_arr[0], dir_path);
-                        if (char_arg_len > 1) {
-                                printf("command arguments:\n");
-                                for (size_t i = 1; i < char_arg_len; i++) {
-                                        printf("%s\n", parsed_arr[i]);
-                                }
+
+
+                        pid = fork();
+                        if (pid < 0) {
+                                printf("Fork error\n");
+                                closedir(dir_read);
+                                return -1;
                         }
-                        return 0;
+                        /* inside the CHILD, load a new c file using execv call */
+                        else if (pid == 0) {
+                                closedir(dir_read);
+                                if (execv(dir_path, parsed_arr) == -1 ) {
+                                        fprintf(stderr, "execv couldn't load %s\n", dir_path);
+                                }
+                                return -1;
+                        }
+                        /* inside the PARENT */
+                        else {
+                                /* Parent waits till all child processes have been reaped
+                                   wait_pid will be < 0 once all child processes have terminated */
+                                while ((wait_pid = wait(&status)) > 0);
+                                closedir(dir_read);
+                                return 0;
+                        }
                 }
         }
         closedir(dir_read);
@@ -245,10 +298,13 @@ int search_dir (char *dir_path, char *parsed_arr[], int char_arg_len) {
 
 
 /* parsing function that returns the number of cmd line args entered by user */
-int parser(char *user_input, char *parsed_arr[], size_t ui_length) {
+int parser(char *user_input, char *parsed_arr[], size_t ui_length, struct Node *export_head) {
         /* int to hold umber of cmd line args */
         int char_arg_len=0;
+        /* temp cmd argument holder to hold the return values from strtok() */
+        char *temp_cmd_arg_holder[MAX_CMD_INPUT_BUFFER];
 
+        /* removing newline char from end that fgets adds */
         if (user_input[ui_length-1] == '\n') {
                 user_input[ui_length-1] = '\0';
         }
@@ -258,13 +314,94 @@ int parser(char *user_input, char *parsed_arr[], size_t ui_length) {
         strcpy(temp_input, user_input);
 
         int ptr_pos = 0;
+
         /* strtok to delim the func with ' ' and save it in parsed_arr */
-        parsed_arr[ptr_pos] = strtok(temp_input, " ");
+        temp_cmd_arg_holder[ptr_pos] = strtok(temp_input, " ");
+        parsed_arr[ptr_pos] = parse_env_var_call(temp_cmd_arg_holder[ptr_pos],
+                                                 strlen(temp_cmd_arg_holder[ptr_pos]),
+                                                 export_head);
         while (parsed_arr[ptr_pos] != NULL)
         {
                 char_arg_len++;
-                parsed_arr[++ptr_pos] = strtok(NULL, " ");
+                temp_cmd_arg_holder[++ptr_pos] = strtok(NULL, " ");
+                // parsed_arr[++ptr_pos] = strtok(NULL, " ");
+                if (temp_cmd_arg_holder[ptr_pos] == NULL) {
+                        // printf("NULL encountered insdie loop\n");
+                        break;
+                }
+                parsed_arr[ptr_pos] = parse_env_var_call(temp_cmd_arg_holder[ptr_pos],
+                                                         strlen(temp_cmd_arg_holder[ptr_pos]),
+                                                         export_head);
+        }
+        return char_arg_len; /* return number of space separated cmd parts entered */
+}
+
+/* func to parse and return valur of env vars entered as cmd arguments
+   in the form $ENV_VAR_NAME i.e. cd $JAVA */
+char *parse_env_var_call(char *cmd_argument, int cmd_len, struct Node * export_head) {
+        /* stores name of var after the $ sign. i.e. PATH for $PATH*/
+        char parsed_argument[cmd_len];
+        /* stores content of export_linked_list env_var name and val combinations
+           i.e. PATH=/usr/bin:/usr */
+        char temp_export_linked_list_store[MAX_CMD_INPUT_BUFFER];
+
+        /* immediately return the same NULL str is a NULL string is passed*/
+        if (cmd_argument == NULL) {
+                return cmd_argument;
         }
 
-        return char_arg_len; /* return number of space separated cmd parts entered */
+        /* if the cmd_arg does start with a $ */
+        if (cmd_argument[0] == '$') {
+                /* save contents of cmd_argument[1:] to parsed_argument */
+                for (size_t i = 1; i < cmd_len; i++) {
+                        parsed_argument[i-1] = cmd_argument[i];
+                }
+                parsed_argument[cmd_len] = '\0';
+
+                /* loop through export linked list to see of the env_var exists */
+                struct Node * cur = export_head;
+                while (cur != NULL) {
+                        char *var_name_val[2]; /* char arg array to hold var name and val */
+                        /* So as to not modify the actual contents of the export ln lst*/
+                        strcpy(temp_export_linked_list_store, cur->content);
+                        var_name_val[0] = strtok(temp_export_linked_list_store, "="); // holds var name i.e. PATH
+                        var_name_val[1] = strtok(NULL, "="); //hold var_vale i.e. /usr/bin for PATH var
+
+                        /* if the user entered env var and the export linked list saved env var match
+                           return the val of the saved env_var from the export linked list */
+                        if (strcmp(parsed_argument, var_name_val[0]) == 0) {
+                                return var_name_val[1];
+                        }
+                        cur = cur->next;
+                }
+        }
+        return &cmd_argument[0]; /* return unchanged string if not a env var call */
+}
+
+/* function forks the current process to create a child process and run execv in the child
+   returns 0 for successful run, -1 for negative run or error */
+int fork_and_execv (char *dir_path, char *parsed_arr[]) {
+        pid_t pid, wait_pid; // to hold process pids
+        int status = 0;
+
+        pid = fork();
+        if (pid < 0) {
+                printf("Fork error\n");
+                return -1;
+        }
+        /* inside the CHILD, load a new c file using execv call */
+        else if (pid == 0) {
+                if (execv(dir_path, parsed_arr) == -1 ) {
+                        fprintf(stderr, "execv couldn't load %s\n", dir_path);
+                }
+                return -1;
+        }
+        /* inside the PARENT */
+        else {
+                /* Parent waits till all child processes have been reaped
+                   wait_pid will be < 0 once all child processes have terminated */
+                while ((wait_pid = wait(&status)) > 0);
+                return 0;
+        }
+        return 0; /* Control should not reach here */
 }
