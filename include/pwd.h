@@ -2,6 +2,6 @@
 #define PWD_H
 #include "common.h"
 
-void pwd_cmd_handler(struct Node *head); /* function to handle cmd pwd*/
+void pwd_cmd_handler(); /* function to handle cmd pwd*/
 
 #endif
