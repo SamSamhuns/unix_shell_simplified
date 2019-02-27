@@ -211,8 +211,10 @@ int search_in_export_path( struct Node *head, char *parsed_arr[], int char_arg_l
                         if ( temp_path_holder[strlen(export_var_array_paths[i])-1] != '/' ) {
                                 strcat(temp_path_holder, "/");
                         }
+                        int result;
+                        result  = search_dir(temp_path_holder, parsed_arr, char_arg_len);
 
-                        if (search_dir(temp_path_holder, parsed_arr, char_arg_len) == 0) {
+                        if (result== 0) {
                                 return 0;
                         }
                 }
@@ -226,8 +228,8 @@ int search_in_export_path( struct Node *head, char *parsed_arr[], int char_arg_l
 int search_dir (char *dir_path, char *parsed_arr[], int char_arg_len) {
         struct dirent *dir_entry; // define struct for a ptr for entering directory
         DIR *dir_read = opendir(dir_path); // returns a ptr of type DIR
-        pid_t pid, wait_pid; // to hold process pids
-        int status = 0;
+        // pid_t pid, wait_pid; // to hold process pids
+        // int status = 0;
 
         /* if the directory specified by the path couldn't be opened */
         if (dir_read == NULL) {
@@ -239,25 +241,12 @@ int search_dir (char *dir_path, char *parsed_arr[], int char_arg_len) {
         parsed_arr[char_arg_len] = NULL;
 
         if ( (parsed_arr[0][0] == '.' && parsed_arr[0][1] == '/') || parsed_arr[0][0] == '/') {
-                pid = fork();
-                if (pid < 0) {
-                        printf("Fork error\n");
-                        return -1;
-                }
-                /* inside the CHILD, load a new c file using execv call */
-                else if (pid == 0) {
-                        if (execv(parsed_arr[0], parsed_arr) == -1) {
-                                fprintf(stdout, "ececv couldn't load %s\n", parsed_arr[0]);
-                        }
-                        return -1;
-                }
-                /* inside the PARENT */
-                else {
-                        /* Parent waits till all child processes have been reaped
-                           wait_pid will be < 0 once all child processes have terminated */
-                        while ((wait_pid = wait(&status)) > 0);
+                if (fork_and_execv(parsed_arr[0], parsed_arr) == 0) {
+                        closedir(dir_read);
                         return 0;
                 }
+                closedir(dir_read);
+                return -1;
         }
 
         while ((dir_entry = readdir(dir_read)) != NULL) {
@@ -267,26 +256,7 @@ int search_dir (char *dir_path, char *parsed_arr[], int char_arg_len) {
                         // parsed_arr[0] is the external cmd that has been entered i.e. ls
                         strcat(dir_path, parsed_arr[0]);
 
-
-                        pid = fork();
-                        if (pid < 0) {
-                                printf("Fork error\n");
-                                closedir(dir_read);
-                                return -1;
-                        }
-                        /* inside the CHILD, load a new c file using execv call */
-                        else if (pid == 0) {
-                                closedir(dir_read);
-                                if (execv(dir_path, parsed_arr) == -1 ) {
-                                        fprintf(stderr, "execv couldn't load %s\n", dir_path);
-                                }
-                                return -1;
-                        }
-                        /* inside the PARENT */
-                        else {
-                                /* Parent waits till all child processes have been reaped
-                                   wait_pid will be < 0 once all child processes have terminated */
-                                while ((wait_pid = wait(&status)) > 0);
+                        if (fork_and_execv(dir_path, parsed_arr) == 0) {
                                 closedir(dir_read);
                                 return 0;
                         }
@@ -332,6 +302,10 @@ int parser(char *user_input, char *parsed_arr[], size_t ui_length, struct Node *
                 parsed_arr[ptr_pos] = parse_env_var_call(temp_cmd_arg_holder[ptr_pos],
                                                          strlen(temp_cmd_arg_holder[ptr_pos]),
                                                          export_head);
+                if (DEBUG == 1) {
+                        printf("\t%i)INSIDE MAIN PARSER LOOP %s\n",char_arg_len, parsed_arr[ptr_pos]);
+                }
+
         }
         return char_arg_len; /* return number of space separated cmd parts entered */
 }
@@ -356,7 +330,7 @@ char *parse_env_var_call(char *cmd_argument, int cmd_len, struct Node * export_h
                 for (size_t i = 1; i < cmd_len; i++) {
                         parsed_argument[i-1] = cmd_argument[i];
                 }
-                parsed_argument[cmd_len] = '\0';
+                parsed_argument[cmd_len-1] = '\0';
 
                 /* loop through export linked list to see of the env_var exists */
                 struct Node * cur = export_head;
@@ -383,6 +357,14 @@ char *parse_env_var_call(char *cmd_argument, int cmd_len, struct Node * export_h
 int fork_and_execv (char *dir_path, char *parsed_arr[]) {
         pid_t pid, wait_pid; // to hold process pids
         int status = 0;
+        int return_status = 0; // return status is communicated to the parent, 0 by default
+        int fd_pipe[2]; // int array to hold the file decrp ends for pipe
+
+        /* creating pipe for IPC */
+        if (pipe(fd_pipe) == -1) {
+                fprintf(stderr, "Pipe creation error");
+                return -1;
+        }
 
         pid = fork();
         if (pid < 0) {
@@ -391,17 +373,34 @@ int fork_and_execv (char *dir_path, char *parsed_arr[]) {
         }
         /* inside the CHILD, load a new c file using execv call */
         else if (pid == 0) {
+                close(fd_pipe[READ_PIPE]); // closing the read end of pipe in the parent
+
                 if (execv(dir_path, parsed_arr) == -1 ) {
-                        fprintf(stderr, "execv couldn't load %s\n", dir_path);
+                        return_status = -1; /* As child cannot return before exiting */
+                        /* Error in execv */
+                        // fprintf(stderr, "execv couldn't load %s\n", dir_path);
                 }
-                return -1;
+                /* writes in the pipe to the parent process to send the return status */
+                write(fd_pipe[WRITE_PIPE], &return_status, sizeof(return_status));
+                close(fd_pipe[WRITE_PIPE]);
+                /* IMPORTANT */
+                /* Must run to stop extraneous child process if execv failed */
+                exit(-1);
         }
         /* inside the PARENT */
         else {
+                close(fd_pipe[WRITE_PIPE]); // closing write end of the pipe in the parent
+                read(fd_pipe[READ_PIPE], &return_status, sizeof(return_status)); // reading the return status from the child
+                close(fd_pipe[READ_PIPE]); // closing read end
+
                 /* Parent waits till all child processes have been reaped
                    wait_pid will be < 0 once all child processes have terminated */
                 while ((wait_pid = wait(&status)) > 0);
-                return 0;
+                if (DEBUG == 1) {
+                        printf("Return status from PARENT is %i\n",return_status);
+                }
+
+                return return_status;
         }
         return 0; /* Control should not reach here */
 }
