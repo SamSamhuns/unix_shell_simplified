@@ -3,7 +3,6 @@
 #include <unistd.h>
 #include "common.h"
 #include "pwd.h"
-#include "export.h"
 
 /* function to handle cmd pwd */
 void pwd_cmd_handler(){
