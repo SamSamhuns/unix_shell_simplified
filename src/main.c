@@ -22,19 +22,20 @@ int parser(char *user_input, char *parsed_input[], size_t ui_length, struct Node
 void run_command (int char_arg_len, int arg_order_exclamation, int number_of_args, struct Node *history_head,
                   struct Node *export_head, FILE *fptr, char *user_input, char *parsed_input[] );
 /* searches for parsed_arr[0] file in the path dir_path */
-int search_dir (char *dir_path, char *parsed_arr[], int char_arg_len);
+int search_dir (char *dir_path, char *parsed_arr[], int char_arg_len, struct Node * export_head);
 /* func to search for cmd in the ENV vars saved by the export func */
-int search_in_export_path( struct Node *head, char *parsed_arr[], int char_arg_len );
+int search_in_export_path( struct Node *export_head, char *parsed_arr[], int char_arg_len );
 /* returns replaced instances of cmd args where $VAR_NAME replaced with the env var value */
 char *parse_env_var_call(char *cmd_argument, int cmd_len, struct Node * export_head);
 
-int fork_and_execv (char *dir_path, char *parsed_arr[]);
+int fork_and_execve (char *dir_path, char *parsed_arr[], struct Node * export_head);
 
 /* function to handle the main loop of the cmd prompt */
 int main(void){
         int char_arg_len = 0; /* length of number of args and cmd entered each time */
         int number_of_args = 0; /* total number of args entered including history.txt contents */
         int arg_order_exclamation = 0; /* arg order for exclamantion mark exec from history */
+        // int export_head_env_var_count = 0; /* var to hold count of env variables in shell */
         FILE *fptr = fopen("./history.txt", "a+"); /* open history to read and append cmds to*/
         char *parsed_input[MAX_INPUT_ARR_LEN]; /* array of char ptrs to hold parsed input*/
         char *user_input = calloc(MAX_CMD_INPUT_BUFFER, sizeof(char));
@@ -45,11 +46,14 @@ int main(void){
         struct Node *history_head = NULL;
         struct Node *export_head = NULL;
         history_head = malloc(sizeof(Node));
-        export_head = malloc(sizeof(Node));
         history_head->next = NULL;
-        export_head->next = malloc(sizeof(Node));
 
-        if (history_head == NULL || export_head == NULL || export_head->next == NULL ) {
+        export_head = malloc(sizeof(Node));
+        export_head->next = malloc(sizeof(Node));
+        export_head->next->next = malloc(sizeof(Node));
+
+        if (history_head == NULL || export_head == NULL || export_head->next == NULL ||
+            export_head->next->next == NULL ) {
                 printf("Out of memory\n");
                 return 1;
         }
@@ -57,6 +61,8 @@ int main(void){
         strcpy(export_head->content, "PATH=");
         getcwd(user_input, MAX_CMD_INPUT_BUFFER);
         strcpy(export_head->next->content, strcat(initial_pwd_value, user_input));
+        strcpy(export_head->next->next->content, "TERM=xterm-256color");
+        export_head->next->next->next = NULL;
 
         /* load history.txt cmds in linked list buffer
            load func returns number of args that have been loaded */
@@ -174,8 +180,8 @@ void run_command (int char_arg_len, int arg_order_exclamation, int number_of_arg
 
 /* func to search for cmd in the ENV vars saved by the export func
    returns 0 for successful find and -1 for failure */
-int search_in_export_path( struct Node *head, char *parsed_arr[], int char_arg_len ) {
-        struct Node *cur = head;
+int search_in_export_path( struct Node *export_head, char *parsed_arr[], int char_arg_len ) {
+        struct Node *cur = export_head;
         while (cur != NULL) {
                 static char *export_var_array[2]; /* To hold env var name and value */
                 static char *export_var_array_paths[MAX_INPUT_KWRD_LEN]; /* to hold
@@ -212,7 +218,7 @@ int search_in_export_path( struct Node *head, char *parsed_arr[], int char_arg_l
                                 strcat(temp_path_holder, "/");
                         }
                         int result;
-                        result  = search_dir(temp_path_holder, parsed_arr, char_arg_len);
+                        result  = search_dir(temp_path_holder, parsed_arr, char_arg_len, export_head);
 
                         if (result== 0) {
                                 return 0;
@@ -225,7 +231,7 @@ int search_in_export_path( struct Node *head, char *parsed_arr[], int char_arg_l
 
 /* searches for parsed_arr[0] file in the path dir_path
    returns 0 for sucessful find and -1 for failure */
-int search_dir (char *dir_path, char *parsed_arr[], int char_arg_len) {
+int search_dir (char *dir_path, char *parsed_arr[], int char_arg_len,  struct Node *export_head) {
         struct dirent *dir_entry; // define struct for a ptr for entering directory
         DIR *dir_read = opendir(dir_path); // returns a ptr of type DIR
         // pid_t pid, wait_pid; // to hold process pids
@@ -241,7 +247,7 @@ int search_dir (char *dir_path, char *parsed_arr[], int char_arg_len) {
         parsed_arr[char_arg_len] = NULL;
 
         if ( (parsed_arr[0][0] == '.' && parsed_arr[0][1] == '/') || parsed_arr[0][0] == '/') {
-                if (fork_and_execv(parsed_arr[0], parsed_arr) == 0) {
+                if (fork_and_execv(parsed_arr[0], parsed_arr, export_head) == 0) {
                         closedir(dir_read);
                         return 0;
                 }
@@ -256,7 +262,7 @@ int search_dir (char *dir_path, char *parsed_arr[], int char_arg_len) {
                         // parsed_arr[0] is the external cmd that has been entered i.e. ls
                         strcat(dir_path, parsed_arr[0]);
 
-                        if (fork_and_execv(dir_path, parsed_arr) == 0) {
+                        if (fork_and_execv(dir_path, parsed_arr, export_head) == 0) {
                                 closedir(dir_read);
                                 return 0;
                         }
@@ -354,11 +360,22 @@ char *parse_env_var_call(char *cmd_argument, int cmd_len, struct Node * export_h
 
 /* function forks the current process to create a child process and run execv in the child
    returns 0 for successful run, -1 for negative run or error */
-int fork_and_execv (char *dir_path, char *parsed_arr[]) {
+int fork_and_execve (char *dir_path, char *parsed_arr[], struct Node *export_head) {
         pid_t pid, wait_pid; // to hold process pids
         int status = 0;
         int return_status = 0; // return status is communicated to the parent, 0 by default
         int fd_pipe[2]; // int array to hold the file decrp ends for pipe
+        char *env_var_holder[MAX_ENV_VAR_NUMBER]; // char ptr array to hold the env vars
+
+        int env_var_iterator = 0;
+        struct Node *cur = export_head;
+        while (cur != NULL) {
+                // strcpy(env_var_holder[env_var_iterator], cur->content);
+                env_var_holder[env_var_iterator] = cur->content;
+                env_var_iterator++;
+                cur = cur->next;
+        }
+        env_var_holder[env_var_iterator] = NULL;
 
         /* creating pipe for IPC */
         if (pipe(fd_pipe) == -1) {
@@ -375,7 +392,7 @@ int fork_and_execv (char *dir_path, char *parsed_arr[]) {
         else if (pid == 0) {
                 close(fd_pipe[READ_PIPE]); // closing the read end of pipe in the parent
 
-                if (execv(dir_path, parsed_arr) == -1 ) {
+                if (execve(dir_path, parsed_arr, env_var_holder) == -1 ) {
                         return_status = -1; /* As child cannot return before exiting */
                         /* Error in execv */
                         // fprintf(stderr, "execv couldn't load %s\n", dir_path);
