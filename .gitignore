@@ -54,5 +54,8 @@ dkms.conf
 # executable shell file
 shell
 
+# history txt file
+history.txt
+
 # MAC OS System info files
 *.DS_Store
