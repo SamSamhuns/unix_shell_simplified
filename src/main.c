@@ -247,7 +247,7 @@ int search_dir (char *dir_path, char *parsed_arr[], int char_arg_len,  struct No
         parsed_arr[char_arg_len] = NULL;
 
         if ( (parsed_arr[0][0] == '.' && parsed_arr[0][1] == '/') || parsed_arr[0][0] == '/') {
-                if (fork_and_execv(parsed_arr[0], parsed_arr, export_head) == 0) {
+                if (fork_and_execve(parsed_arr[0], parsed_arr, export_head) == 0) {
                         closedir(dir_read);
                         return 0;
                 }
@@ -262,7 +262,7 @@ int search_dir (char *dir_path, char *parsed_arr[], int char_arg_len,  struct No
                         // parsed_arr[0] is the external cmd that has been entered i.e. ls
                         strcat(dir_path, parsed_arr[0]);
 
-                        if (fork_and_execv(dir_path, parsed_arr, export_head) == 0) {
+                        if (fork_and_execve(dir_path, parsed_arr, export_head) == 0) {
                                 closedir(dir_read);
                                 return 0;
                         }
