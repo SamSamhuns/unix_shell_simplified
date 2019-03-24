@@ -9,6 +9,22 @@
 #define WRITE_PIPE 1 /* Write end of the IPC pipe */
 #define DEBUG 0
 
+/* Boilerplate code for easy error checking
+  Example.  if(pipe(fd_pipe) == -1){
+            perror("could not pipe");
+            exit(1);
+            }
+  Can be written as:
+            TRY_AND_CATCH(pipe(fd_pipe), "pipe");
+*/
+#define TRY_AND_CATCH(exp, err_cmd) do { \
+    if ((exp) < 0) { \
+        perror(err_cmd); \
+        exit(1);   \
+    } \
+} while (0)
+
+/* struct defn for linkedlist node */
 typedef struct Node {
         char content[MAX_INPUT_KWRD_LEN];
         struct Node *next;
