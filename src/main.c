@@ -201,6 +201,14 @@ int search_in_export_path( struct Node *export_head, char *parsed_arr[], int cha
                         continue;
                 }
 
+                /* OPTIONAL check only search for external cmds in path variable
+                    i.e. if SOME_ENV_VAR = /bin:/usr/bin; exists then ls still doesn't
+                    work if PATH var does not have correct path */
+                /*if ( strcmp(export_var_array[0], (char *)"PATH") != 0 ) {
+                        cur = cur->next;
+                        continue;
+                   }*/
+
                 /* split using the colon as the delimiter and store it in
                    export_var_array_paths */
                 export_var_array_paths[path_iter] = strtok(export_var_array[1], ":");
@@ -245,7 +253,7 @@ int search_dir (char *dir_path, char *parsed_arr[], int char_arg_len,  struct No
                 return -1;
         }
 
-        /* Adding a NULL ptr to the end of parsed_arr for argv being sent to excev */
+        /* Adding a NULL ptr to the end of parsed_arr for argv being sent to exceve */
         parsed_arr[char_arg_len] = NULL;
 
         if ( (parsed_arr[0][0] == '.' && parsed_arr[0][1] == '/') || parsed_arr[0][0] == '/') {
@@ -368,9 +376,9 @@ int fork_and_execve (char *dir_path, char *parsed_arr[], struct Node *export_hea
         int return_status = 0; // return status is communicated to the parent, 0 by default
         int fd_pipe[2]; // int array to hold the file decrp ends for pipe
         char *env_var_holder[MAX_ENV_VAR_NUMBER]; // char ptr array to hold the env vars
-
         int env_var_iterator = 0;
         struct Node *cur = export_head;
+
         while (cur != NULL) {
                 // strcpy(env_var_holder[env_var_iterator], cur->content);
                 env_var_holder[env_var_iterator] = cur->content;
@@ -379,11 +387,9 @@ int fork_and_execve (char *dir_path, char *parsed_arr[], struct Node *export_hea
         }
         env_var_holder[env_var_iterator] = NULL;
 
-        /* creating pipe for IPC */
-        if (pipe(fd_pipe) == -1) {
-                fprintf(stderr, "Pipe creation error");
-                return -1;
-        }
+        /* creating pipe for IPC
+           TRY_AND_CATCH is a macro for err check*/
+        TRY_AND_CATCH(pipe(fd_pipe), "pipe");
 
         pid = fork();
         if (pid < 0) {
@@ -394,6 +400,9 @@ int fork_and_execve (char *dir_path, char *parsed_arr[], struct Node *export_hea
         else if (pid == 0) {
                 close(fd_pipe[READ_PIPE]); // closing the read end of pipe in the parent
 
+                /* Example use of execve
+                   `execve( char * mcd_path, char *argv[], char *envp[]);`
+                   `execve("bin/ls", {"ls", "-l", "-a", NULL}, {"PATH=/bin" ,NULL}) */
                 if (execve(dir_path, parsed_arr, env_var_holder) == -1 ) {
                         return_status = -1; /* As child cannot return before exiting */
                         /* Error in execv */
