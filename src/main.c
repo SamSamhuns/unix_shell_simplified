@@ -14,6 +14,7 @@
 #include "cd.h"
 #include "pwd.h"
 #include "exit.h"
+#include "pipe.h"
 #include "export.h"
 #include "common.h"
 #include "history.h"
@@ -30,7 +31,13 @@ int search_in_export_path( struct Node *export_head, char *parsed_arr[], int cha
 /* returns replaced instances of cmd args where $VAR_NAME replaced with the env var value */
 char *parse_env_var_call(char *cmd_argument, int cmd_len, struct Node * export_head);
 
+/* function forks the current process to create a child process and run execv in the child
+   returns 0 for successful run, -1 for negative run or error */
 int fork_and_execve (char *dir_path, char *parsed_arr[], struct Node * export_head);
+
+/* function that runs piped run_piped_commands
+   returns 0 on success and -1 on failure */
+int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *export_head);
 
 /* function to handle the main loop of the cmd prompt */
 int main(void){
@@ -107,8 +114,12 @@ int main(void){
                         }
                 }
                 /* MAIN CMD RUNS HERE */
-                run_command(char_arg_len, arg_order_exclamation, number_of_args, history_head,
-                            export_head, fptr, user_input, parsed_input);
+                /* When run_piped_commands != 0 , there are no pipes so run
+                  so we can run the main run_command function */
+                if (run_piped_commands (parsed_input, char_arg_len, export_head) != 0) {
+                        run_command(char_arg_len, arg_order_exclamation, number_of_args, history_head,
+                                    export_head, fptr, user_input, parsed_input);
+                }
         }
         /* Control should not reach here */
         return 0;
@@ -282,7 +293,6 @@ int search_dir (char *dir_path, char *parsed_arr[], int char_arg_len,  struct No
         return -1;
 }
 
-
 /* parsing function that returns the number of cmd line args entered by user */
 int parser(char *user_input, char *parsed_arr[], size_t ui_length, struct Node *export_head) {
         /* int to hold umber of cmd line args */
@@ -431,4 +441,597 @@ int fork_and_execve (char *dir_path, char *parsed_arr[], struct Node *export_hea
                 return return_status;
         }
         return 0; /* Control should not reach here */
+}
+
+/* function that runs piped run_piped_commands
+   returns 0 on success and -1 on failure */
+int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *export_head) {
+
+        // PARSER PART
+        // char *parsed_arr[MAX_INPUT_ARR_LEN];
+        // char *user_input ="cat < history.txt | grep man | grep foo | grep dog | grep bar > newer.txt";
+        // // printf("User input is %s\n", user_input);
+        // int ptr_pos = 0;
+        // int char_arg_len=0;
+        //
+        // static char temp_input[MAX_CMD_INPUT_BUFFER];
+        // strcpy(temp_input, user_input);
+        // char *temp_cmd_arg_holder[MAX_CMD_INPUT_BUFFER];
+        // temp_cmd_arg_holder[ptr_pos] = strtok(temp_input, " ");
+        // parsed_arr[ptr_pos] = temp_cmd_arg_holder[0];
+        // while (parsed_arr[ptr_pos] != NULL)
+        // {
+        //         char_arg_len++;
+        //         temp_cmd_arg_holder[++ptr_pos] = strtok(NULL, " ");
+        //         if (temp_cmd_arg_holder[ptr_pos] == NULL) {
+        //                 break;
+        //         }
+        //         parsed_arr[ptr_pos] = temp_cmd_arg_holder[ptr_pos];
+        //
+        // }
+
+        // // Creating test export head
+        // struct Node *export_head = NULL;
+        // export_head = malloc(sizeof(Node));
+        // export_head->next = malloc(sizeof(Node));
+        //
+        // strcpy(export_head->content, "PATH=/bin:/usr/bin");
+        // strcpy(export_head->next->content, "TERM=xterm-256color");
+        // export_head->next->next = NULL;
+
+
+        //////////////////////////////////////////////////////////////////////
+        //////////// NOW THE REAL PART SRTAS /////////////////////////////////
+        //////////////////////////////////////////////////////////////////////
+
+        // PARSER PART END
+
+        /* setting up the correct value for the env_var for execve
+           i.e. char *env_var[] = {"PATH=/bin:/usr/bin", NULL}; */
+        int env_var_index= 0;
+        char *env_var[MAX_INPUT_ARR_LEN];
+
+        // generating the env_var variable
+        struct Node *cur = export_head;
+        while ( cur != NULL ) {
+                env_var[env_var_index] = cur->content;
+                env_var_index += 1;
+                cur = cur->next;
+        }
+        env_var[env_var_index] = NULL;
+
+        /* indexes to denote what section of args from parsed_arr to use for each pipe*/
+        int looplen = 0;
+        pid_t wait_pid;
+        int fork_pid;
+        int child_status = 0;
+        int start_index = 0; // for delimiting start of execve cmd_args
+        int end_index = 0; // for delimiting start of execve cmd_args
+        int pipes_loc[MAX_INPUT_ARR_LEN];
+        int cur_pipe_being_handled = 1; // (Not 0 indexed) Index of current pipe being handled starts woth 1
+        int remaining_pipes_to_be_handled = -1;
+        int new_fds[2]; // for piping
+        int old_fds[2]; // for piping
+        char *built_in_cmd_arr[] = {"cd", "pwd", "exit", "pwd", "history", "export", "!", "\0"};
+
+        parsed_arr[char_arg_len] = NULL;
+
+        /* Checking if pipes exist */
+        if  (check_pipe_rtn_loc(parsed_arr, char_arg_len, pipes_loc)== 0) {
+                if (DEBUG==1) printf("Pipes were not disovered\n" ); // prints
+                return -1; // Must return -1 to main function
+        }
+        else {
+                for (int i = 1; i < pipes_loc[0]+1; i++) {
+                        if (DEBUG==1) printf("Loc of pipes %i\n", pipes_loc[i] );
+                }
+        }
+        if (DEBUG) {printf("Num of args %i and num of pipe is %i\n",char_arg_len, pipes_loc[0] ); }// 11
+        remaining_pipes_to_be_handled = pipes_loc[0];
+        int cmd_pos = pipes_loc[1]; // index location of first pipe cmd
+
+        /* This declarartion might be optional */
+        /* TRY_AND_CATCH(pipe(old_fds), "pipe"); */
+
+        /* Checking for errors */
+        if (error_whole_arg_check(parsed_arr, char_arg_len) != 0 ) {
+                return -1;
+        }
+
+        /* MAIN LOOP it is assumed that spaces have been provided between cmds */
+        /* When space is provided between redirects and pipes i.e. cat > file.txt
+           instead of cat>file.txt */
+        for (int j = 1; j < pipes_loc[0]+2; j++) {
+                if (remaining_pipes_to_be_handled > 0) {
+                        TRY_AND_CATCH(pipe(new_fds), "pipe");
+                }
+                else {
+                        /* no more pipes to handle */
+                        /* return with success */
+                        /* Wait till all child processes are terminated */
+                        close(new_fds[READ]);
+                        close(new_fds[WRITE]);
+                        close(old_fds[READ]);
+                        close(old_fds[WRITE]);
+
+                        /** wait till all children have terminated */
+                        while ((wait_pid=wait(&child_status)) > 0);
+                        return 0;
+                }
+
+                /* pipes_loc has the index of pipes [4, 1, 3, 6, 9]
+                   pipes_loc[0] is the number of pipes so we start with i = 1
+                   we access each pipe directly skipping other commands */
+                cmd_pos = pipes_loc[j];
+                looplen = strlen(parsed_arr[cmd_pos]);
+
+                if (DEBUG == 1) {
+                        printf("%s\n",parsed_arr[cmd_pos] );
+                }
+
+                if (looplen == 1) {
+                        if (parsed_arr[cmd_pos][0] == '<') {
+                                ///////////////////////////* stdin redirection *//////////////////////////////////////////
+                                cur_pipe_being_handled += 1;
+                                remaining_pipes_to_be_handled -= 1;
+
+                                fork_pid = fork();
+                                if ( fork_pid < 0 ) {
+                                        perror("fork");
+                                        exit(1);
+                                }
+                                /* Child process */
+                                else if (fork_pid == 0) {
+                                        FILE *stdin_fread = fopen(parsed_arr[cmd_pos+1], "r");
+
+                                        /* All dup2 should be done in the child */
+                                        dup2(fileno(stdin_fread), READ);
+
+                                        /* < stdin redirect will always be the first pipe */
+
+                                        /* if there is a next pipe cmd */
+                                        if (remaining_pipes_to_be_handled > 0) {
+                                                dup2(new_fds[WRITE], WRITE);
+                                                close(new_fds[READ]);
+                                                close(new_fds[WRITE]);
+                                        }
+
+                                        /* For running execve in the given form
+                                           execve(path, cmd_to_run, env_var);
+                                           grep main < history.txt */
+                                        start_index = 0;
+                                        end_index = cmd_pos;
+                                        char *cmd_to_run[MAX_INPUT_ARR_LEN];
+                                        for (int i = start_index; i < end_index; i++) {
+                                                cmd_to_run[i] = parsed_arr[i];
+                                        }
+                                        cmd_to_run[end_index] = NULL;
+
+                                        /* Checking for built-in cmds
+                                            parsed_arr[0] is always checked
+                                            and only 7 built-ins checked for now*/
+
+                                        for (int i = 0; i < 7; i++) {
+                                                if (strcmp(built_in_cmd_arr[i], parsed_arr[0]) == 0)
+                                                {
+                                                        printf("FOUND!!!\n");
+
+
+
+                                                        fclose(stdin_fread);
+                                                        exit(1);
+                                                }
+                                                if (strlen(built_in_cmd_arr[i]) == 1) {
+                                                        if ( parsed_arr[0][0] == '!') {
+                                                                printf("exclamantion found %c sdf\n", parsed_arr[0][0]);
+
+
+
+
+
+                                                                fclose(stdin_fread);
+                                                                exit(1);
+                                                        }
+                                                }
+                                        }
+
+                                        /* Seeting up the correct path
+                                           if the cmd_to_check i.e. grep is found in env_var path
+                                           corrected_path is set to /usr/bin/grep */
+                                        char *cmd_to_check = parsed_arr[0]; // Assuming for stdin redirect parsed_arr[0] is alwyas the first
+                                        char corrected_path[MAX_INPUT_ARR_LEN];
+                                        if (search_in_export_path_when_pipes(export_head, cmd_to_check, char_arg_len, corrected_path) == 0) {
+                                                if (DEBUG==1) {
+                                                        printf("Command was found and full corrected path is %s and cmd_to_check is %s\n", corrected_path, cmd_to_check);
+                                                }
+                                        }
+                                        /* Error in cmds and not found in path so return -1 */
+                                        else {
+                                                if (DEBUG==1) {printf("Command was not found and cmd_to_check is %s \n", cmd_to_check );}
+                                                exit(1);
+                                        }
+
+                                        fclose(stdin_fread);
+                                        execve(&corrected_path[0], cmd_to_run, env_var);
+                                        perror("execve");
+                                        exit(1);
+                                }
+                                /* Parent */
+                                else {
+                                        /* if there is a need for next piping */
+                                        if (remaining_pipes_to_be_handled > 0) {
+                                                old_fds[READ] = new_fds[READ];
+                                                old_fds[WRITE] = new_fds[WRITE];
+                                        }
+                                }
+                        }
+                        else if (parsed_arr[cmd_pos][0] == '>') {
+                                ///////////////////////////* redirecting stdout *//////////////////////////////////////////
+                                cur_pipe_being_handled += 1;
+                                remaining_pipes_to_be_handled -= 1;
+
+                                fork_pid = fork();
+                                if ( fork_pid < 0 ) {
+                                        perror("fork");
+                                        exit(1);
+                                }
+                                /* Child process */
+                                else if (fork_pid == 0) {
+                                        FILE *stdout_fwrite = fopen(parsed_arr[cmd_pos+1], "w");
+
+                                        /* if there was a previous cmd
+                                           i.e. grep main < history.txt > new.txt */
+                                        if (cur_pipe_being_handled > 2) {
+                                                dup2(old_fds[READ], READ);
+                                                close(old_fds[READ]);
+                                                close(old_fds[WRITE]);
+                                        }
+                                        /* if > is the first pipe
+                                           i.e. ps -a > process.txt */
+                                        else {
+                                                dup2(fileno(stdout_fwrite), WRITE);
+
+                                                /* For running execve in the given form
+                                                   execve(path, cmd_to_run, env_var); */
+                                                start_index = 0;
+                                                end_index = cmd_pos;
+                                                char *cmd_to_run[MAX_INPUT_ARR_LEN];
+                                                for (int i = start_index; i < end_index; i++) {
+                                                        cmd_to_run[i] = parsed_arr[i];
+                                                }
+                                                cmd_to_run[end_index] = NULL;
+
+                                                /* Seeting up the correct path
+                                                   if the cmd_to_check i.e. grep is found in env_var path
+                                                   corrected_path is set to /usr/bin/grep or /bin/ps */
+                                                char *cmd_to_check = parsed_arr[0]; // Assuming for first stdoutredirect parsed_arr[0] is alwyas the first
+                                                char corrected_path[MAX_INPUT_ARR_LEN];
+                                                if (search_in_export_path_when_pipes(export_head, cmd_to_check, char_arg_len, corrected_path) == 0) {
+                                                        if (DEBUG==1) {
+                                                                printf("Command was found and full corrected path is %s and cmd_to_check is %s\n", corrected_path, cmd_to_check);
+                                                        }
+                                                }
+                                                /* Error in cmds and not found in path so return -1 */
+                                                else {
+                                                        if (DEBUG==1) {
+                                                                printf("Command was not found and cmd_to_check is %s \n", cmd_to_check );
+                                                        }
+                                                        exit(1);
+                                                }
+
+                                                fclose(stdout_fwrite);
+                                                execve(&corrected_path[0], cmd_to_run, env_var);
+                                                perror("execve");
+                                                exit(1);
+                                        }
+
+                                        /* If there is a need for next piping if > is not the last pipe
+                                            i.e. cat < history.txt > process.txt 2> error.txt */
+                                        if (remaining_pipes_to_be_handled > 0) {
+                                                dup2(new_fds[WRITE], WRITE);
+                                                close(new_fds[READ]);
+                                                close(new_fds[WRITE]);
+                                        }
+
+                                        /* In This case > is the last pipe
+                                           i.e. cat < history.txt > new.txt
+                                           getc(stdin) gets stdin one char at a time till EOF
+                                           fgets() cannot be used as it terminates at newline chars */
+                                        int ch = getc(stdin);
+                                        while (ch != EOF && ch != '\0')
+                                        {
+                                                /* save from stdin to stdout stream */
+                                                putc(ch, stdout_fwrite);
+                                                ch = getc(stdin);
+                                        }
+
+                                        if (feof(stdin)) {
+                                                if (DEBUG==1) {printf("End of file reached.\n"); }
+                                        }
+                                        else {
+                                                if (DEBUG ==1 ) {printf("Something went wrong.\n");}
+                                                exit(1);
+                                        }
+                                        fclose(stdout_fwrite);
+                                        exit(0);
+                                }
+                                /* Parent */
+                                else {
+                                        /* if there was a previous cmd */
+                                        if (cur_pipe_being_handled > 2) {
+                                                close(old_fds[READ]);
+                                                close(old_fds[WRITE]);
+                                        }
+                                        /* if there is a need for next piping */
+                                        if (remaining_pipes_to_be_handled > 0) {
+                                                old_fds[READ] = new_fds[READ];
+                                                old_fds[WRITE] = new_fds[WRITE];
+                                        }
+                                }
+                        }
+                        else if (parsed_arr[cmd_pos][0] == '|') {
+                                ////////////////////////////////* piping  | *//////////////////////////////////////////
+                                /* redirecting stdout */
+                                cur_pipe_being_handled += 1;
+                                remaining_pipes_to_be_handled -= 1;
+
+                                fork_pid = fork();
+                                if ( fork_pid < 0 ) {
+                                        perror("fork");
+                                        exit(1);
+                                }
+                                /* Child process */
+                                else if (fork_pid == 0) {
+                                        /* if there is a need for next piping */
+                                        if (remaining_pipes_to_be_handled > 0) {
+                                                dup2(new_fds[WRITE], WRITE);
+                                                close(new_fds[READ]);
+                                                close(new_fds[WRITE]);
+                                        }
+                                        /* if there was a previous cmd / pipe
+                                           i.e. cat < history.txt | grep main
+                                                ps | grep apache2 | grep 2 (For second pipe here)*/
+                                        if (cur_pipe_being_handled > 2) {
+                                                dup2(old_fds[READ], READ);
+                                                close(old_fds[READ]);
+                                                close(old_fds[WRITE]);
+                                        }
+                                        /* if | is the first pipe
+                                           i.e. ps -a | grep bash
+                                           For this we need a grandchild process */
+                                        else {
+                                                int lead_pipe_fds[2];
+                                                TRY_AND_CATCH(pipe(lead_pipe_fds), "pipe");
+
+                                                // Creating a grandchild here
+                                                pid_t sub_child_pid = fork();
+
+                                                if (sub_child_pid < 0) {
+                                                        perror("fork");
+                                                        exit(1);
+                                                }
+                                                /* Grandchild */
+                                                else if (sub_child_pid == 0 ) {
+                                                        dup2(lead_pipe_fds[WRITE_PIPE], WRITE);
+                                                        close(lead_pipe_fds[READ]);
+                                                        close(lead_pipe_fds[WRITE]);
+
+                                                        /* For running execve in the given form
+                                                           execve(path, cmd_to_run, env_var);
+                                                           for cmd before |
+                                                           ps -a | grep bash */
+                                                        start_index = 0;
+                                                        end_index = cmd_pos;
+                                                        char *cmd_to_run[MAX_INPUT_ARR_LEN];
+                                                        for (int i = start_index; i < end_index; i++) {
+                                                                cmd_to_run[i] = parsed_arr[i];
+                                                        }
+                                                        cmd_to_run[end_index] = NULL;
+
+                                                        /* Seeting up the correct path
+                                                           if the cmd_to_check i.e. grep is found in env_var path
+                                                           corrected_path is set to /usr/bin/grep or /bin/ps */
+                                                        char *cmd_to_check = parsed_arr[0]; // Assuming for first stdoutredirect parsed_arr[0] is alwyas the first
+                                                        char corrected_path[MAX_INPUT_ARR_LEN];
+                                                        if (search_in_export_path_when_pipes(export_head, cmd_to_check, char_arg_len, corrected_path) == 0) {
+                                                                if (DEBUG==1) {
+                                                                        printf("Command was found and full corrected path is %s and cmd_to_check is %s\n", corrected_path, cmd_to_check);
+                                                                }
+                                                        }
+                                                        /* Error in cmds and not found in path so return -1 */
+                                                        else {
+                                                                if (DEBUG==1) {
+                                                                        printf("Command was not found and cmd_to_check is %s \n", cmd_to_check );
+                                                                }
+                                                                exit(1);
+                                                        }
+
+                                                        execve(&corrected_path[0], cmd_to_run, env_var);
+                                                        perror("execve");
+                                                        exit(1);
+                                                }
+                                                /*  Grandchild's Parent */
+                                                else {
+                                                        dup2(lead_pipe_fds[READ], READ);
+                                                        close(lead_pipe_fds[READ]);
+                                                        close(lead_pipe_fds[WRITE]);
+
+                                                        int retrnStatus;
+                                                        waitpid(fork_pid, &retrnStatus, 0); // Parent process waits here for child to terminate.
+                                                        // Verify child process terminated without error.
+                                                        if (retrnStatus == 0) {
+                                                                // printf("Sub Child terminated normally.\n");
+                                                        }
+                                                        if (retrnStatus == 1) {
+                                                                // printf("Sub Child terminated with an error.\n");
+                                                                exit(1);
+                                                        }
+
+                                                        /* For running execve in the given form
+                                                           execve(path, cmd_to_run, env_var);
+                                                           for cmd before |
+                                                           ps -a | grep bash */
+                                                        start_index = cmd_pos + 1;
+
+                                                        /* if no other pipes afer first pipe */
+                                                        if ( remaining_pipes_to_be_handled <= 0) {
+                                                                end_index = char_arg_len;
+                                                        }
+                                                        /* if other pipes remina to be executed
+                                                           i.e. ps -a | grep bash > output.txt
+                                                           pipes_loc = {2, 2, 5}*/
+                                                        else {
+                                                                end_index = pipes_loc[cur_pipe_being_handled];
+                                                        }
+
+                                                        char *cmd_to_run[MAX_INPUT_ARR_LEN];
+                                                        int cmd_added_index = 0; // to denote index of cmd_to_run
+                                                        for (int i = start_index; i < end_index; i++) {
+                                                                cmd_to_run[cmd_added_index] = parsed_arr[i];
+                                                                cmd_added_index += 1;
+                                                        }
+                                                        cmd_to_run[cmd_added_index] = NULL;
+
+                                                        /* Seeting up the correct path
+                                                           if the cmd_to_check i.e. grep is found in env_var path
+                                                           corrected_path is set to /usr/bin/grep or /bin/ps */
+                                                        char *cmd_to_check = parsed_arr[start_index]; // Assuming for first stdoutredirect parsed_arr[0] is alwyas the first
+                                                        char corrected_path[MAX_INPUT_ARR_LEN];
+                                                        if (search_in_export_path_when_pipes(export_head, cmd_to_check, char_arg_len, corrected_path) == 0) {
+                                                                if (DEBUG==1) {
+                                                                        printf("Command was found and full corrected path is %s and cmd_to_check is %s\n", corrected_path, cmd_to_check);
+                                                                }
+                                                        }
+                                                        /* Error in cmds and not found in path so return -1 */
+                                                        else {
+                                                                if (DEBUG==1) {
+                                                                        printf("Command was not found and cmd_to_check is %s \n", cmd_to_check );
+                                                                }
+                                                                exit(1);
+                                                        }
+                                                        execve(&corrected_path[0], cmd_to_run, env_var);
+                                                        perror("execve");
+                                                        exit(1);
+                                                }
+                                        }
+
+                                        /* For calculating the start index */
+                                        start_index = cmd_pos + 1;
+
+                                        /* if no other pipes afer pipe
+                                           i.e. cat < history.txt | grep main
+                                           pipes_loc = {2, 1, 3}*/
+                                        if ( remaining_pipes_to_be_handled <= 0) {
+                                                end_index = char_arg_len;
+                                        }
+                                        /* if other pipes remain to be executed
+                                           i.e. cat < history.txt | grep main | grep foo
+                                           pipes_loc = {3, 1, 3, 6}
+                                           end_index will be set to 6 */
+                                        else {
+                                                end_index = pipes_loc[cur_pipe_being_handled];
+                                        }
+
+                                        char *cmd_to_run[MAX_INPUT_ARR_LEN];
+                                        int cmd_added_index = 0;    // to denote index of cmd_to_run
+                                        for (int i = start_index; i < end_index; i++) {
+                                                cmd_to_run[cmd_added_index] = parsed_arr[i];
+                                                cmd_added_index += 1;
+                                        }
+                                        cmd_to_run[cmd_added_index] = NULL;
+
+                                        /* Seeting up the correct path
+                                           if the cmd_to_check i.e. grep is found in env_var path
+                                           corrected_path is set to /usr/bin/grep or /bin/ps */
+                                        char *cmd_to_check = parsed_arr[start_index]; // Assuming for first stdoutredirect parsed_arr[0] is alwyas the first
+                                        char corrected_path[MAX_INPUT_ARR_LEN];
+                                        if (search_in_export_path_when_pipes(export_head, cmd_to_check, char_arg_len, corrected_path) == 0) {
+                                                if (DEBUG==1) {
+                                                        printf("Command was found and full corrected path is %s and cmd_to_check is %s\n", corrected_path, cmd_to_check);
+                                                }
+                                        }
+                                        /* Error in cmds and not found in path so return -1 */
+                                        else {
+                                                if (DEBUG==1) {
+                                                        printf("Command was not found and cmd_to_check is %s \n", cmd_to_check );
+                                                }
+                                                exit(1);
+                                        }
+
+                                        execve( &corrected_path[0], cmd_to_run, env_var);
+                                        perror("execve");
+                                        exit(1);
+                                }
+                                /* Parent */
+                                else {
+                                        /* if there was a previous cmd */
+                                        if (cur_pipe_being_handled > 2) {
+                                                close(old_fds[READ]);
+                                                close(old_fds[WRITE]);
+                                        }
+                                        /* if there is a need for next piping */
+                                        if (remaining_pipes_to_be_handled > 0) {
+                                                old_fds[READ] = new_fds[READ];
+                                                old_fds[WRITE] = new_fds[WRITE];
+                                        }
+                                }
+                        }
+                        else {
+                                if (DEBUG == 1) {
+                                        printf("Error in one char redirection\n" );
+                                }
+                                close(new_fds[READ]);
+                                close(new_fds[WRITE]);
+                                close(old_fds[READ]);
+                                close(old_fds[WRITE]);
+                                /* Must return to main function here*/
+                                return -1;
+                        }
+                }
+                /* Again when space is provided between redirects and pipes i.e. cat >> file.txt
+                   instead of cat>>file.txt */
+                /* TO DO This section should only run once */
+                else if (looplen == 2) {
+                        if (parsed_arr[cmd_pos][0] == '2' && parsed_arr[cmd_pos][1] == '>') {
+                                // stderr redirection 2>
+                        }
+                        else if (parsed_arr[cmd_pos][0] == '1' && parsed_arr[cmd_pos][1] == '>') {
+                                // stdout redirection 1>
+                        }
+                        else if (parsed_arr[cmd_pos][0] == '>' && parsed_arr[cmd_pos][1] == '>') {
+                                // stdout append redirection >>
+                        }
+                        else {
+                                /*Error in redirection*/
+                                if (DEBUG == 1) {
+                                        printf("Error in two char redirection\n" );
+                                }
+                                close(new_fds[READ]);
+                                close(new_fds[WRITE]);
+                                close(old_fds[READ]);
+                                close(old_fds[WRITE]);
+                                /* Must return to main function here*/
+                                return -1;
+                        }
+                }
+                /* Parent checks if child process terminated correctly */
+                int rtnStatus;
+                waitpid(fork_pid, &rtnStatus, 0); // Parent process waits here for child to terminate.
+
+                // Verify child process terminated without error.
+                if (rtnStatus == 0) {
+                        if (DEBUG == 1) {
+                                printf("Child terminated normally.\n");
+                        }
+                }
+                if (rtnStatus != 0) {
+                        if (DEBUG == 1) {
+                                printf("Child terminated with an error.\n");
+                        }
+                        return -1;
+                }
+        }
+        /* Control should not reach here */
+        if (DEBUG==1) {printf("CONTORL SHOULD NOT GET HERE \n");}
+        return -2;
 }
