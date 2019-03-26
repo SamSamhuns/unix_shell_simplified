@@ -11,32 +11,6 @@
 #define READ 0
 #define WRITE 1
 
-/* General pseudo code logic for pipes in loops
-   for cmd in cmds
-    if there is a next cmd
-        pipe(new_fds)
-    fork
-    if child
-        if there is a previous cmd
-            dup2(old_fds[0], 0)
-            close(old_fds[0])
-            close(old_fds[1])
-        if there is a next cmd
-            close(new_fds[0])
-            dup2(new_fds[1], 1)
-            close(new_fds[1])
-        exec cmd || die
-    else
-        if there is a previous cmd
-            close(old_fds[0])
-            close(old_fds[1])
-        if there is a next cmd
-            old_fds = new_fds
-   if there are multiple cmds
-    close(old_fds[0])
-    close(old_fds[1])
- */
-
 /* Checks if piping or redirection has been entered in the input cmd
    And if pipes were present then return value if greater than 1 and reprs the
    total number of pipes found
@@ -50,11 +24,20 @@ int error_check_pipe(char *parsed_arr[], int char_arg_len, int cur_index);
    returns 0 for no error and -1 for errors */
 int error_whole_arg_check(char *parsed_arr[], int char_arg_len);
 
+/* function that changes the val of corrected_path to path+cmd_name */
+/* cmd_to_check might be grep or ps or other cmd
+    On success return 0 ans corrected_path is set something like /usr/bin/grep
+    Given /usr/bin is in the export path
+    On failure returns -1 and corrected_path will be set to NULL */
+int search_in_export_path_when_pipes( struct Node *export_head, char *cmd_to_check, int char_arg_len, char *corrected_path);
+
+// main func needs parsed_arr, char_arg_len export_head
 int main()
 {
         // PARSER PART
         char *parsed_arr[MAX_INPUT_ARR_LEN];
-        char *user_input ="grep main < history.txt > new.txt ";//cat < history.txt | grep main";//ps -a | grep bash > saver.txt";//"| grep main > newer.txt";//"cat < history.txt  > new.txt"; //|  grep exit";// |     grep hoe 2> error.txt";
+        char *user_input ="cat < history.txt | grep man | grep foo | grep dog | grep bar";
+        printf("User input is %s\n", user_input);
         int ptr_pos = 0;
         int char_arg_len=0;
 
@@ -83,43 +66,26 @@ int main()
         strcpy(export_head->next->content, "TERM=xterm-256color");
         export_head->next->next = NULL;
 
+
+        //////////////////////////////////////////////////////////////////////
+        //////////// NOW THE REAL PART SRTAS /////////////////////////////////
+        //////////////////////////////////////////////////////////////////////
+
         // PARSER PART END
-        char *env_var[] = {"PATH=/bin:/usr/bin", NULL};
 
+        /* setting up the correct value for the env_var for execve
+           i.e. char *env_var[] = {"PATH=/bin:/usr/bin", NULL}; */
+        int env_var_index= 0;
+        char *env_var[MAX_INPUT_ARR_LEN];
 
-        // char *dir_loop[] = {"/bin/", "/usr/bin/"};
-        // for (int j = 0; j < char_arg_len; j++) {
-        //         printf("STRING being checked is %s\n",parsed_arr[j] );
-        //         if (strcmp(parsed_arr[j], "<") == 0 ||
-        //             strcmp(parsed_arr[j], ">") == 0 ||
-        //             strcmp(parsed_arr[j], "|") == 0 ||
-        //             strcmp(parsed_arr[j], ">>") == 0 ||
-        //             strcmp(parsed_arr[j], "2>") == 0 ||
-        //             strcmp(parsed_arr[j], "1>") == 0) {
-        //                 /* pass this check */
-        //                 printf("Pipes not checked in path \n" );
-        //                 continue;
-        //         }
-        //
-        //         for (int i = 0; i < 2; i++) {
-        //                 char checker[100];
-        //                 // checker = strdup(dir_loop[i]);
-        //                 strcpy(checker, dir_loop[i]);
-        //                 strcat(checker, parsed_arr[j]);
-        //                 printf("VALUE OF CHECKER is %s\n",checker );
-        //                 if (access(checker, X_OK | F_OK)==0) {
-        //                         printf("Accessible cmd %s\n",parsed_arr[j] );
-        //                         break;
-        //                 }
-        //                 else {
-        //                         printf("%s is not accessible \n",parsed_arr[j] );
-        //                 }
-        //         }
-        // }
-
-
-
-        // IMPORTANT PART START
+        // generating the env_var variable
+        struct Node *cur = export_head;
+        while ( cur != NULL ) {
+                env_var[env_var_index] = cur->content;
+                env_var_index += 1;
+                cur = cur->next;
+        }
+        env_var[env_var_index] = NULL;
 
         /* indexes to denote what section of args from parsed_arr to use for each pipe*/
         int looplen = 0;
@@ -137,9 +103,9 @@ int main()
 
         parsed_arr[char_arg_len] = NULL;
 
+        /* Checking if pipes exist */
         if  (check_pipe_rtn_loc(parsed_arr, char_arg_len, pipes_loc)== 0) {
                 if (DEBUG==1) printf("Pipes were not disovered\n" ); // prints
-                /* TODO */
                 return -1; // Must return -1 to main function
         }
         else {
@@ -147,7 +113,7 @@ int main()
                         if (DEBUG==1) printf("Loc of pipes %i\n", pipes_loc[i] );
                 }
         }
-        printf("Num of args %i and num of pipe is %i\n",char_arg_len, pipes_loc[0] ); // 11
+        if (DEBUG) {printf("Num of args %i and num of pipe is %i\n",char_arg_len, pipes_loc[0] ); }// 11
         remaining_pipes_to_be_handled = pipes_loc[0];
         int cmd_pos = pipes_loc[1]; // index location of first pipe cmd
 
@@ -155,14 +121,11 @@ int main()
         /* TRY_AND_CATCH(pipe(old_fds), "pipe"); */
 
         /* Checking for errors */
-        if (error_whole_arg_check(parsed_arr, char_arg_len) == 0 ) {
-                printf("No errors found\n");
-        } else {
-                printf("ERRORS FOUND in piped argument\n");
+        if (error_whole_arg_check(parsed_arr, char_arg_len) != 0 ) {
                 return -1;
         }
 
-        /* it is assumed that spaces have been provided between cmds */
+        /* Main loop it is assumed that spaces have been provided between cmds */
         /* When space is provided between redirects and pipes i.e. cat > file.txt
            instead of cat>file.txt */
         for (int i = 1; i < pipes_loc[0]+2; i++) {
@@ -182,6 +145,7 @@ int main()
                         while ((wait_pid=wait(&child_status)) > 0);
                         return 0;
                 }
+
                 /* pipes_loc has the index of pipes [4, 1, 3, 6, 9]
                    pipes_loc[0] is the number of pipes so we start with i = 1
                    we access each pipe directly skipping other commands */
@@ -194,7 +158,7 @@ int main()
 
                 if (looplen == 1) {
                         if (parsed_arr[cmd_pos][0] == '<') {
-                                // stdin redirection
+                                ///////////////////////////* stdin redirection *//////////////////////////////////////////
                                 cur_pipe_being_handled += 1;
                                 remaining_pipes_to_be_handled -= 1;
 
@@ -230,10 +194,10 @@ int main()
                                         }
                                         cmd_to_run[end_index] = NULL;
 
-
                                         /* Checking for built-in cmds
                                             parsed_arr[0] is always checked
                                             and only 7 built-ins checked for now*/
+
                                         for (int i = 0; i < 7; i++) {
                                                 if (strcmp(built_in_cmd_arr[i], parsed_arr[0]) == 0)
                                                 {
@@ -244,22 +208,30 @@ int main()
                                                 if (strlen(built_in_cmd_arr[i]) == 1) {
                                                         if ( parsed_arr[0][0] == '!') {
                                                                 printf("exclamantion found %c sdf\n", parsed_arr[0][0]);
+                                                                fclose(stdin_fread);
+                                                                exit(1);
                                                         }
-                                                        fclose(stdin_fread);
-                                                        exit(1);
                                                 }
                                         }
 
-
-                                        //////////////////////////////////////////////////////////////////////
-                                        //////////// TODO MUST BE CHANGED IN MAIN FUNC ///////////////////////
-                                        /////////////////////SUPPORT FOR BUILT IN/////////////////////////////
-
-
-                                        char *path = "/usr/bin/grep";
+                                        /* Seeting up the correct path
+                                           if the cmd_to_check i.e. grep is found in env_var path
+                                           corrected_path is set to /usr/bin/grep */
+                                        char *cmd_to_check = parsed_arr[0]; // Assuming for stdin redirect parsed_arr[0] is alwyas the first
+                                        char corrected_path[MAX_INPUT_ARR_LEN];
+                                        if (search_in_export_path_when_pipes(export_head, cmd_to_check, char_arg_len, corrected_path) == 0) {
+                                                if (DEBUG==1) {
+                                                        printf("Command was found and full corrected path is %s and cmd_to_check is %s\n", corrected_path, cmd_to_check);
+                                                }
+                                        }
+                                        /* Error in cmds and not found in path so return -1 */
+                                        else {
+                                                if (DEBUG==1) {printf("Command was not found and cmd_to_check is %s \n", cmd_to_check );}
+                                                exit(1);
+                                        }
 
                                         fclose(stdin_fread);
-                                        execve(path, cmd_to_run, env_var);
+                                        execve(&corrected_path[0], cmd_to_run, env_var);
                                         perror("execve");
                                         exit(1);
                                 }
@@ -273,7 +245,7 @@ int main()
                                 }
                         }
                         else if (parsed_arr[cmd_pos][0] == '>') {
-                                /* redirecting stdout */
+                                ///////////////////////////* redirecting stdout *//////////////////////////////////////////
                                 cur_pipe_being_handled += 1;
                                 remaining_pipes_to_be_handled -= 1;
 
@@ -298,7 +270,6 @@ int main()
                                         else {
                                                 dup2(fileno(stdout_fwrite), WRITE);
 
-
                                                 /* For running execve in the given form
                                                    execve(path, cmd_to_run, env_var); */
                                                 start_index = 0;
@@ -309,26 +280,40 @@ int main()
                                                 }
                                                 cmd_to_run[end_index] = NULL;
 
-                                                //////////////////////////////////////////////////////////////////////
-                                                //////////// TODO MUST BE CHANGED IN MAIN FUNC ///////////////////////
-                                                /////////////////////SUPPORT FOR BUILT IN/////////////////////////////
-                                                char *path = "/bin/ps";
+                                                /* Seeting up the correct path
+                                                   if the cmd_to_check i.e. grep is found in env_var path
+                                                   corrected_path is set to /usr/bin/grep or /bin/ps */
+                                                char *cmd_to_check = parsed_arr[0]; // Assuming for first stdoutredirect parsed_arr[0] is alwyas the first
+                                                char corrected_path[MAX_INPUT_ARR_LEN];
+                                                if (search_in_export_path_when_pipes(export_head, cmd_to_check, char_arg_len, corrected_path) == 0) {
+                                                        if (DEBUG==1) {
+                                                                printf("Command was found and full corrected path is %s and cmd_to_check is %s\n", corrected_path, cmd_to_check);
+                                                        }
+                                                }
+                                                /* Error in cmds and not found in path so return -1 */
+                                                else {
+                                                        if (DEBUG==1) {
+                                                                printf("Command was not found and cmd_to_check is %s \n", cmd_to_check );
+                                                        }
+                                                        exit(1);
+                                                }
 
                                                 fclose(stdout_fwrite);
-                                                execve(path, cmd_to_run, env_var);
+                                                execve(&corrected_path[0], cmd_to_run, env_var);
                                                 perror("execve");
                                                 exit(1);
                                         }
 
-                                        /* if there is a need for next piping
-                                           This section might be optional here */
+                                        /* If there is a need for next piping if > is not the last pipe
+                                            i.e. cat < history.txt > process.txt 2> error.txt */
                                         if (remaining_pipes_to_be_handled > 0) {
-                                                dup2(fileno(stdout_fwrite), WRITE);
+                                                dup2(new_fds[WRITE], WRITE);
                                                 close(new_fds[READ]);
                                                 close(new_fds[WRITE]);
                                         }
 
-                                        /* This case > is the last pipe cat < history.txt > new.txt
+                                        /* In This case > is the last pipe
+                                           i.e. cat < history.txt > new.txt
                                            getc(stdin) gets stdin one char at a time till EOF
                                            fgets() cannot be used as it terminates at newline chars */
                                         int ch = getc(stdin);
@@ -364,7 +349,7 @@ int main()
                                 }
                         }
                         else if (parsed_arr[cmd_pos][0] == '|') {
-                                /* piping  | */
+                                ////////////////////////////////* piping  | *//////////////////////////////////////////
                                 /* redirecting stdout */
                                 cur_pipe_being_handled += 1;
                                 remaining_pipes_to_be_handled -= 1;
@@ -376,12 +361,8 @@ int main()
                                 }
                                 /* Child process */
                                 else if (fork_pid == 0) {
-                                        int new_fds_pipe_set_check = 0; // var to check if new_fds has been set already
-
                                         /* if there is a need for next piping */
                                         if (remaining_pipes_to_be_handled > 0) {
-                                                printf("Redirection already done\n" );
-                                                // new_fds_pipe_set_check = 1;
                                                 dup2(new_fds[WRITE], WRITE);
                                                 close(new_fds[READ]);
                                                 close(new_fds[WRITE]);
@@ -390,7 +371,6 @@ int main()
                                            i.e. cat < history.txt | grep main
                                                 ps | grep apache2 | grep 2 (For second pipe here)*/
                                         if (cur_pipe_being_handled > 2) {
-                                                printf("THIS INPUT SHOULD BE PRESENT!\n");
                                                 dup2(old_fds[READ], READ);
                                                 close(old_fds[READ]);
                                                 close(old_fds[WRITE]);
@@ -427,19 +407,27 @@ int main()
                                                         }
                                                         cmd_to_run[end_index] = NULL;
 
-                                                        //////////////////////////////////////////////////////////////////////
-                                                        //////////// TODO MUST BE CHANGED IN MAIN FUNC ///////////////////////
-                                                        /////////////////////SUPPORT FOR BUILT IN/////////////////////////////
+                                                        /* Seeting up the correct path
+                                                           if the cmd_to_check i.e. grep is found in env_var path
+                                                           corrected_path is set to /usr/bin/grep or /bin/ps */
+                                                        char *cmd_to_check = parsed_arr[0]; // Assuming for first stdoutredirect parsed_arr[0] is alwyas the first
+                                                        char corrected_path[MAX_INPUT_ARR_LEN];
+                                                        if (search_in_export_path_when_pipes(export_head, cmd_to_check, char_arg_len, corrected_path) == 0) {
+                                                                if (DEBUG==1) {
+                                                                        printf("Command was found and full corrected path is %s and cmd_to_check is %s\n", corrected_path, cmd_to_check);
+                                                                }
+                                                        }
+                                                        /* Error in cmds and not found in path so return -1 */
+                                                        else {
+                                                                if (DEBUG==1) {
+                                                                        printf("Command was not found and cmd_to_check is %s \n", cmd_to_check );
+                                                                }
+                                                                exit(1);
+                                                        }
 
-                                                        char *path = "/bin/ps";
-
-                                                        execve(path, cmd_to_run, env_var);
+                                                        execve(&corrected_path[0], cmd_to_run, env_var);
                                                         perror("execve");
                                                         exit(1);
-
-                                                        // execve();
-                                                        // perror("execve");
-                                                        // exit(1);
                                                 }
                                                 /*  Grandchild's Parent */
                                                 else {
@@ -483,45 +471,42 @@ int main()
                                                         }
                                                         cmd_to_run[cmd_added_index] = NULL;
 
-                                                        //////////////////////////////////////////////////////////////////////
-                                                        //////////// TODO MUST BE CHANGED IN MAIN FUNC ///////////////////////
-                                                        /////////////////////SUPPORT FOR BUILT IN/////////////////////////////
-                                                        // char *cmd_to_run[MAX_INPUT_ARR_LEN];
-                                                        // cmd_to_run[0] = "grep";
-                                                        // cmd_to_run[1] = "bash";
-                                                        // cmd_to_run[2] = NULL;
-                                                        char *path = "/usr/bin/grep";
-
-                                                        execve(path, cmd_to_run, env_var);
+                                                        /* Seeting up the correct path
+                                                           if the cmd_to_check i.e. grep is found in env_var path
+                                                           corrected_path is set to /usr/bin/grep or /bin/ps */
+                                                        char *cmd_to_check = parsed_arr[start_index]; // Assuming for first stdoutredirect parsed_arr[0] is alwyas the first
+                                                        char corrected_path[MAX_INPUT_ARR_LEN];
+                                                        if (search_in_export_path_when_pipes(export_head, cmd_to_check, char_arg_len, corrected_path) == 0) {
+                                                                if (DEBUG==1) {
+                                                                        printf("Command was found and full corrected path is %s and cmd_to_check is %s\n", corrected_path, cmd_to_check);
+                                                                }
+                                                        }
+                                                        /* Error in cmds and not found in path so return -1 */
+                                                        else {
+                                                                if (DEBUG==1) {
+                                                                        printf("Command was not found and cmd_to_check is %s \n", cmd_to_check );
+                                                                }
+                                                                exit(1);
+                                                        }
+                                                        execve(&corrected_path[0], cmd_to_run, env_var);
                                                         perror("execve");
                                                         exit(1);
-
-                                                        // execve();
-                                                        // perror("execve");
-                                                        // exit(1);
                                                 }
                                         }
-
-                                        /* if there was a previous cmd / pipe
-                                           i.e. cat < history.txt | grep main*/
-
-                                        // if new_fds pipe redirection has not been set already
-                                        // if ( new_fds_pipe_set_check == 0 ) {
-                                        //         dup2(new_fds[WRITE], WRITE);
-                                        //         close(new_fds[READ]);
-                                        //         close(new_fds[WRITE]);
-                                        // }
 
                                         /* For calculating the start index */
                                         start_index = cmd_pos + 1;
 
-                                        /* if no other pipes afer pipe */
+                                        /* if no other pipes afer pipe
+                                           i.e. cat < history.txt | grep main
+                                           pipes_loc = {2, 1, 3}*/
                                         if ( remaining_pipes_to_be_handled <= 0) {
                                                 end_index = char_arg_len;
                                         }
-                                        /* if other pipes remian to be executed
-                                           i.e. cat < history.txt | grep main | grep boo > saver.txt
-                                           pipes_loc = {4, 1, 3, 6, 9}*/
+                                        /* if other pipes remain to be executed
+                                           i.e. cat < history.txt | grep main | grep foo
+                                           pipes_loc = {3, 1, 3, 6}
+                                           end_index will be set to 6 */
                                         else {
                                                 end_index = pipes_loc[cur_pipe_being_handled];
                                         }
@@ -534,37 +519,27 @@ int main()
                                         }
                                         cmd_to_run[cmd_added_index] = NULL;
 
-                                        for (size_t i = 0; i < cmd_added_index; i++) {
-                                                printf("%s_____",cmd_to_run[i]);
+                                        /* Seeting up the correct path
+                                           if the cmd_to_check i.e. grep is found in env_var path
+                                           corrected_path is set to /usr/bin/grep or /bin/ps */
+                                        char *cmd_to_check = parsed_arr[start_index]; // Assuming for first stdoutredirect parsed_arr[0] is alwyas the first
+                                        char corrected_path[MAX_INPUT_ARR_LEN];
+                                        if (search_in_export_path_when_pipes(export_head, cmd_to_check, char_arg_len, corrected_path) == 0) {
+                                                if (DEBUG==1) {
+                                                        printf("Command was found and full corrected path is %s and cmd_to_check is %s\n", corrected_path, cmd_to_check);
+                                                }
+                                        }
+                                        /* Error in cmds and not found in path so return -1 */
+                                        else {
+                                                if (DEBUG==1) {
+                                                        printf("Command was not found and cmd_to_check is %s \n", cmd_to_check );
+                                                }
+                                                exit(1);
                                         }
 
-
-                                        //////////////////////////////////////////////////////////////////////
-                                        //////////// TODO MUST BE CHANGED IN MAIN FUNC ///////////////////////
-                                        /////////////////////SUPPORT FOR BUILT IN/////////////////////////////
-                                        // char *cmd_to_run[MAX_INPUT_ARR_LEN];
-                                        // cmd_to_run[0] = "grep";
-                                        // cmd_to_run[1] = "main";
-                                        // cmd_to_run[2] = NULL;
-
-                                        int ch = getc(stdin);
-                                        printf("Before std in loop\n");
-                                        while (ch != EOF && ch != '\0')
-                                        {
-                                                /* save from stdin to stdout stream */
-                                                printf("hello inside char input \n");
-                                                putc(ch, stdout);
-                                                ch = getc(stdin);
-                                        }
-
-                                        char *path = "/usr/bin/grep";
-                                        printf("WE SHOULD BE HERE \n" );
-                                        execve(path, cmd_to_run, env_var);
+                                        execve( &corrected_path[0], cmd_to_run, env_var);
                                         perror("execve");
                                         exit(1);
-                                        // execve(); // run execve
-                                        // perror("execve");
-                                        // exit(1);
                                 }
                                 /* Parent */
                                 else {
@@ -618,30 +593,27 @@ int main()
                                 return -1;
                         }
                 }
-                /* Parent always closes old fds */
-                // close(new_fds[READ]);
-                // close(new_fds[WRITE]);
-
                 /* Parent checks if child process terminated correctly */
                 int rtnStatus;
                 waitpid(fork_pid, &rtnStatus, 0); // Parent process waits here for child to terminate.
 
                 // Verify child process terminated without error.
                 if (rtnStatus == 0) {
-                        printf("Child terminated normally.\n");
+                        if (DEBUG == 1) {
+                                printf("Child terminated normally.\n");
+                        }
                 }
-                if (rtnStatus == 1) {
-                        printf("Child terminated with an error.\n");
+                if (rtnStatus != 0) {
+                        if (DEBUG == 1) {
+                                printf("Child terminated with an error.\n");
+                        }
                         return -1;
                 }
-
         }
         /* Control should not reach here */
         if (DEBUG==1) {printf("CONTORL SHOULD NOT GET HERE \n");}
         return -2;
 }
-
-NEED char *path = "/usr/bin/grep";
 
 /* cmd_to_check might be grep or ps or other cmd
     On success return 0 ans corrected_path is set something like /usr/bin/grep
@@ -684,55 +656,48 @@ int search_in_export_path_when_pipes( struct Node *export_head, char *cmd_to_che
                         if ( temp_path_holder[strlen(export_var_array_paths[i])-1] != '/' ) {
                                 strcat(temp_path_holder, "/");
                         }
-                        int result;
-                        result  = search_dir_when_pipes(temp_path_holder, cmd_to_check, char_arg_len, export_head, corrected_path);
 
-                        if (result== 0) {
+                        /* NOW temp_path_holder is /bin/ or /usr/bin*/
+                        //search_dir_when_pipes
+                        // (temp_path_holder, cmd_to_check, char_arg_len, export_head, corrected_path);
+
+
+
+                        struct dirent *dir_entry; // define struct for a ptr for entering directory
+                        DIR *dir_read = opendir(temp_path_holder); // returns a ptr of type DIR
+                        // pid_t pid, wait_pid; // to hold process pids
+                        // int status = 0;
+
+                        /* if the directory specified by the path couldn't be opened */
+                        if (dir_read == NULL) {
+                                // printf("Error: could not open path directory\n");
+                                return -1;
+                        }
+
+
+                        if ( (cmd_to_check[0] == '.' && cmd_to_check[1] == '/') || cmd_to_check[0] == '/') {
+                                /* CHECK FOR SEGFAULT ERROS HERE */
+                                strcpy(corrected_path, cmd_to_check);
                                 return 0;
                         }
+
+                        while ((dir_entry = readdir(dir_read)) != NULL) {
+                                if ((strcmp(dir_entry->d_name, cmd_to_check)) == 0) {
+
+                                        // cmd_to_check is the external cmd that has been entered i.e. grep
+                                        // Now temp_path_holder = something like /usr/bin/grep
+                                        strcat(temp_path_holder, cmd_to_check);
+
+                                        /* CHECK FOR SEGFAULT ERROS HERE */
+                                        strcpy(corrected_path, temp_path_holder);
+                                        return 0;
+                                }
+                        }
+                        closedir(dir_read);
                 }
                 cur = cur->next;
         }
         corrected_path = NULL;
-        return -1;
-}
-
-int search_dir_when_pipes(char *dir_path, char *cmd_to_check, int char_arg_len,  struct Node *export_head, char *corrected_path) {
-        struct dirent *dir_entry; // define struct for a ptr for entering directory
-        DIR *dir_read = opendir(dir_path); // returns a ptr of type DIR
-        // pid_t pid, wait_pid; // to hold process pids
-        // int status = 0;
-
-        /* if the directory specified by the path couldn't be opened */
-        if (dir_read == NULL) {
-                // printf("Error: could not open path directory\n");
-                return -1;
-        }
-
-        /* Adding a NULL ptr to the end of parsed_arr for argv being sent to exceve */
-        parsed_arr[char_arg_len] = NULL;
-
-        if ( (cmd_to_check[0] == '.' && cmd_to_check[1] == '/') || cmd_to_check[0] == '/') {
-                strcpy();
-                return 0;
-        }
-
-        while ((dir_entry = readdir(dir_read)) != NULL) {
-                if ((strcmp(dir_entry->d_name, cmd_to_check)) == 0) {
-
-                        /* EXECV OPERATION */
-                        // parsed_arr[0] is the external cmd that has been entered i.e. ls
-                        strcat(dir_path, parsed_arr[0]);
-
-
-
-                        if (fork_and_execve(dir_path, parsed_arr, export_head) == 0) {
-                                closedir(dir_read);
-                                return 0;
-                        }
-                }
-        }
-        closedir(dir_read);
         return -1;
 }
 
@@ -745,7 +710,9 @@ int error_whole_arg_check(char *parsed_arr[], int char_arg_len) {
                             parsed_arr[cmd_pos][0] == '>' ||
                             parsed_arr[cmd_pos][0] == '|') {
                                 if (error_check_pipe(parsed_arr, char_arg_len, cmd_pos) == 0 ) {
-                                        printf("No errors\n");
+                                        if (DEBUG == 1) {
+                                                printf("No errors\n");
+                                        }
                                 }
                                 else {
                                         if (DEBUG == 1) {
@@ -833,102 +800,3 @@ int error_check_pipe(char *parsed_arr[], int char_arg_len, int cur_index) {
         /* No error in piping input */
         return 0;
 }
-
-
-// cat < history.txt | grep exit 2> error.txt
-// FILE *reader = fopen("history.txt", "r");
-// char *grep_cmd[]={"/usr/bin/grep", "exit", NULL};
-// char *cat[] = {"/bin/cat", NULL};
-// int catc;
-// int grepc;
-// int fd1[2];
-// // int fd2[2];
-// pipe(fd1);
-// // pipe(fd2[2]);
-//
-//
-//
-// if (fork() == 0) {
-//         dup2(fileno(reader), READ);
-//         dup2(fd1[WRITE], WRITE);
-//
-//         close(fd1[READ]);
-//         close(fd1[WRITE]);
-//
-//         execv(cat[0], cat);
-//         perror("exec");
-// }
-//
-// if (fork() == 0) {
-//         dup2(fd1[READ], READ);
-//
-//         close(fd1[READ]);
-//         close(fd1[WRITE]);
-//
-//         execv(grep_cmd[0], grep_cmd);
-//         perror("exec");
-// }
-// close(fd1[READ]);
-// close(fd1[WRITE]);
-// fclose(reader);
-
-
-//Implementing
-//cat history.txt  | grep exit | grep hoe > FINAL.txt
-// FILE *fptr = fopen("FINAL.txt", "w");
-// char *cat_cmd[]={"/bin/cat", "history.txt", NULL};
-// char *grep_cmd[]={"/usr/bin/grep", "exit", NULL};
-// char *grep2_cmd[]={"/usr/bin/grep", "hoe", NULL};
-// int cat_child;
-// int grep_child;
-// int grep2_child;
-//
-// int fd_pipe1[2];
-// int fd_pipe2[2];
-//
-// pipe(fd_pipe1);
-// pipe(fd_pipe2);
-//
-// cat_child = fork();
-// if(cat_child == 0 ) {
-//
-//         dup2(fd_pipe1[WRITE], WRITE);
-//
-//         close(fd_pipe1[READ]);
-//         close(fd_pipe1[WRITE]);
-//
-//         execv(cat_cmd[0], cat_cmd);
-//         perror("exec");
-// }
-//
-// grep_child = fork();
-// if(grep_child == 0 ) {
-//
-//         dup2(fd_pipe1[READ], READ);
-//         dup2(fd_pipe2[WRITE], WRITE);
-//
-//         close(fd_pipe1[WRITE]);
-//         close(fd_pipe1[READ]);
-//         close(fd_pipe2[WRITE]);
-//         close(fd_pipe2[READ]);
-//
-//         execv(grep_cmd[0], grep_cmd);
-//         perror("exec");
-// }
-// close(fd_pipe1[READ]);
-// close(fd_pipe1[WRITE]);
-//
-// grep2_child = fork();
-// if(grep2_child == 0) {
-//         dup2(fd_pipe2[READ], READ);
-//         dup2(fileno(fptr), WRITE);
-//
-//         close(fd_pipe2[WRITE]);
-//         close(fd_pipe2[READ]);
-//
-//         execv(grep2_cmd[0], grep2_cmd);
-//         perror("exec");
-// }
-// fclose(fptr);
-// close(fd_pipe2[READ]);
-// close(fd_pipe2[WRITE]);
