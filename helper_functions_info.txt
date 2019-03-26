@@ -1,0 +1,153 @@
+// Example pipe codes
+ General pseudo code logic for pipes in loops
+       for cmd in cmds
+        if there is a next cmd
+            pipe(new_fds)
+        fork
+        if child
+            if there is a previous cmd
+                dup2(old_fds[0], 0)
+                close(old_fds[0])
+                close(old_fds[1])
+            if there is a next cmd
+                close(new_fds[0])
+                dup2(new_fds[1], 1)
+                close(new_fds[1])
+            exec cmd || die
+        else
+            if there is a previous cmd
+                close(old_fds[0])
+                close(old_fds[1])
+            if there is a next cmd
+                old_fds = new_fds
+       if there are multiple cmds
+        close(old_fds[0])
+        close(old_fds[1])
+
+
+
+// Helper debug code print for pipe.c
+//////////////////////////// SEC FOR DEBUG PRINTING /////////////////////
+/////////////////////////////////////////////////////////////////////////
+fprintf(stderr, "corrected_path is %s\n", &corrected_path[0]);///////////
+for (size_t i = 0; i < cmd_added_index; i++) {///////////////////////////
+        fprintf(stderr, "CMDs to run are %s\n", cmd_to_run[i]);//////////
+}////////////////////////////////////////////////////////////////////////
+for (size_t i = 0; i < env_var_index; i++) {/////////////////////////////
+        fprintf(stderr, "ENV VAR IS %s\n", env_var[i] );/////////////////
+}////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////
+/////////////////////////////////////////////////////////////////////////
+
+
+
+// cat < history.txt | grep exit
+
+#include <ctype.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <unistd.h>
+#include <dirent.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+
+int main(coid) {
+        FILE *reader = fopen("history.txt", "r");
+        char *grep_cmd[]={"/usr/bin/grep", "exit", NULL};
+        char *cat[] = {"/bin/cat", NULL};
+        int catc;
+        int grepc;
+        int fd1[2];
+        // int fd2[2];
+        pipe(fd1);
+        // pipe(fd2[2]);
+
+
+        if (fork() == 0) {
+                dup2(fileno(reader), READ);
+                dup2(fd1[WRITE], WRITE);
+
+                close(fd1[READ]);
+                close(fd1[WRITE]);
+
+                execv(cat[0], cat);
+                perror("exec");
+        }
+
+        if (fork() == 0) {
+                dup2(fd1[READ], READ);
+
+                close(fd1[READ]);
+                close(fd1[WRITE]);
+
+                execv(grep_cmd[0], grep_cmd);
+                perror("exec");
+        }
+        close(fd1[READ]);
+        close(fd1[WRITE]);
+        fclose(reader);
+
+}
+
+//Implementing
+//cat history.txt  | grep exit | grep hoe > FINAL.txt
+int main(void) {
+        FILE *fptr = fopen("FINAL.txt", "w");
+        char *cat_cmd[]={"/bin/cat", "history.txt", NULL};
+        char *grep_cmd[]={"/usr/bin/grep", "exit", NULL};
+        char *grep2_cmd[]={"/usr/bin/grep", "hoe", NULL};
+        int cat_child;
+        int grep_child;
+        int grep2_child;
+
+        int fd_pipe1[2];
+        int fd_pipe2[2];
+
+        pipe(fd_pipe1);
+        pipe(fd_pipe2);
+
+        cat_child = fork();
+        if(cat_child == 0 ) {
+
+                dup2(fd_pipe1[WRITE], WRITE);
+
+                close(fd_pipe1[READ]);
+                close(fd_pipe1[WRITE]);
+
+                execv(cat_cmd[0], cat_cmd);
+                perror("exec");
+        }
+
+        grep_child = fork();
+        if(grep_child == 0 ) {
+
+                dup2(fd_pipe1[READ], READ);
+                dup2(fd_pipe2[WRITE], WRITE);
+
+                close(fd_pipe1[WRITE]);
+                close(fd_pipe1[READ]);
+                close(fd_pipe2[WRITE]);
+                close(fd_pipe2[READ]);
+
+                execv(grep_cmd[0], grep_cmd);
+                perror("exec");
+        }
+        close(fd_pipe1[READ]);
+        close(fd_pipe1[WRITE]);
+
+        grep2_child = fork();
+        if(grep2_child == 0) {
+                dup2(fd_pipe2[READ], READ);
+                dup2(fileno(fptr), WRITE);
+
+                close(fd_pipe2[WRITE]);
+                close(fd_pipe2[READ]);
+
+                execv(grep2_cmd[0], grep2_cmd);
+                perror("exec");
+        }
+        fclose(fptr);
+        close(fd_pipe2[READ]);
+        close(fd_pipe2[WRITE]);
+}
