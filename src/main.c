@@ -125,7 +125,7 @@ int main(void){
                 }
                 else {
                         if (run_piped_commands (parsed_input, char_arg_len, export_head) != 0) {
-                            fprintf(stderr, "Command not recognized\n");
+                                fprintf(stderr, "Command not recognized\n");
                         }
                 }
         }
@@ -992,12 +992,317 @@ int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *expor
                         else if (looplen == 2) {
                                 if (parsed_arr[cmd_pos][0] == '2' && parsed_arr[cmd_pos][1] == '>') {
                                         // stderr redirection 2>
+                                        ///////////////////////////* redirecting stderr *//////////////////////////////////////////
+                                        cur_pipe_being_handled += 1;
+                                        remaining_pipes_to_be_handled -= 1;
+
+                                        fork_pid = fork();
+                                        if ( fork_pid < 0 ) {
+                                                perror("fork");
+                                                exit(1);
+                                        }
+                                        /* Child process */
+                                        else if (fork_pid == 0) {
+                                                FILE *stdout_fwrite = fopen(parsed_arr[cmd_pos+1], "w");
+
+                                                /* if there was a previous cmd
+                                                   i.e. grep main < history.txt 2> new.txt */
+                                                if (cur_pipe_being_handled > 2) {
+                                                        dup2(old_fds[READ], READ);
+                                                        close(old_fds[READ]);
+                                                        close(old_fds[WRITE]);
+                                                }
+                                                /* if > is the first pipe
+                                                   i.e. ps -a 2> process.txt */
+                                                else {
+                                                        dup2(fileno(stdout_fwrite), ERROR);
+
+                                                        /* For running execve in the given form
+                                                           execve(path, cmd_to_run, env_var); */
+                                                        start_index = 0;
+                                                        end_index = cmd_pos;
+                                                        char *cmd_to_run[MAX_INPUT_ARR_LEN];
+                                                        for (int i = start_index; i < end_index; i++) {
+                                                                cmd_to_run[i] = parsed_arr[i];
+                                                        }
+                                                        cmd_to_run[end_index] = NULL;
+
+                                                        /* Seeting up the correct path
+                                                           if the cmd_to_check i.e. grep is found in env_var path
+                                                           corrected_path is set to /usr/bin/grep or /bin/ps */
+                                                        char *cmd_to_check = parsed_arr[0]; // Assuming for first stdoutredirect parsed_arr[0] is alwyas the first
+                                                        char corrected_path[MAX_INPUT_ARR_LEN];
+                                                        if (search_in_export_path_when_pipes(export_head, cmd_to_check, char_arg_len, corrected_path) == 0) {
+                                                                if (DEBUG==1) {
+                                                                        printf("Command was found and full corrected path is %s and cmd_to_check is %s\n", corrected_path, cmd_to_check);
+                                                                }
+                                                        }
+                                                        /* Error in cmds and not found in path so return -1 */
+                                                        else {
+                                                                if (DEBUG==1) {
+                                                                        printf("Command was not found and cmd_to_check is %s \n", cmd_to_check );
+                                                                }
+                                                                exit(1);
+                                                        }
+
+                                                        fclose(stdout_fwrite);
+                                                        execve(&corrected_path[0], cmd_to_run, env_var);
+                                                        perror("execve");
+                                                        exit(1);
+                                                }
+
+                                                /* If there is a need for next piping if 2> is not the last pipe
+                                                    i.e. cat < history.txt 2> process.txt 2> error.txt */
+                                                if (remaining_pipes_to_be_handled > 0) {
+                                                        dup2(new_fds[WRITE], WRITE);
+                                                        close(new_fds[READ]);
+                                                        close(new_fds[WRITE]);
+                                                }
+
+                                                /* In This case 2> is the last pipe
+                                                   i.e. cat < history.txt 2> new.txt
+                                                   getc(stdin) gets stdin one char at a time till EOF
+                                                   fgets() cannot be used as it terminates at newline chars */
+                                                int ch = getc(stdin);
+                                                while (ch != EOF && ch != '\0')
+                                                {
+                                                        /* save from stdin to stdout stream */
+                                                        putc(ch, stdout_fwrite);
+                                                        ch = getc(stdin);
+                                                }
+
+                                                if (feof(stdin)) {
+                                                        if (DEBUG==1) {printf("End of file reached.\n"); }
+                                                }
+                                                else {
+                                                        if (DEBUG ==1 ) {printf("Something went wrong.\n");}
+                                                        exit(1);
+                                                }
+                                                fclose(stdout_fwrite);
+                                                exit(0);
+                                        }
+                                        /* Parent */
+                                        else {
+                                                /* if there was a previous cmd */
+                                                if (cur_pipe_being_handled > 2) {
+                                                        close(old_fds[READ]);
+                                                        close(old_fds[WRITE]);
+                                                }
+                                                /* if there is a need for next piping */
+                                                if (remaining_pipes_to_be_handled > 0) {
+                                                        old_fds[READ] = new_fds[READ];
+                                                        old_fds[WRITE] = new_fds[WRITE];
+                                                }
+                                        }
                                 }
                                 else if (parsed_arr[cmd_pos][0] == '1' && parsed_arr[cmd_pos][1] == '>') {
-                                        // stdout redirection 1>
+                                        ///////////////////////////* redirecting stdout 1> *//////////////////////////////////////////
+                                        cur_pipe_being_handled += 1;
+                                        remaining_pipes_to_be_handled -= 1;
+
+                                        fork_pid = fork();
+                                        if ( fork_pid < 0 ) {
+                                                perror("fork");
+                                                exit(1);
+                                        }
+                                        /* Child process */
+                                        else if (fork_pid == 0) {
+                                                FILE *stdout_fwrite = fopen(parsed_arr[cmd_pos+1], "w");
+
+                                                /* if there was a previous cmd
+                                                   i.e. grep main < history.txt 1> new.txt */
+                                                if (cur_pipe_being_handled > 2) {
+                                                        dup2(old_fds[READ], READ);
+                                                        close(old_fds[READ]);
+                                                        close(old_fds[WRITE]);
+                                                }
+                                                /* if 1> is the first pipe
+                                                   i.e. ps -a 1> process.txt */
+                                                else {
+                                                        dup2(fileno(stdout_fwrite), WRITE);
+
+                                                        /* For running execve in the given form
+                                                           execve(path, cmd_to_run, env_var); */
+                                                        start_index = 0;
+                                                        end_index = cmd_pos;
+                                                        char *cmd_to_run[MAX_INPUT_ARR_LEN];
+                                                        for (int i = start_index; i < end_index; i++) {
+                                                                cmd_to_run[i] = parsed_arr[i];
+                                                        }
+                                                        cmd_to_run[end_index] = NULL;
+
+                                                        /* Seeting up the correct path
+                                                           if the cmd_to_check i.e. grep is found in env_var path
+                                                           corrected_path is set to /usr/bin/grep or /bin/ps */
+                                                        char *cmd_to_check = parsed_arr[0]; // Assuming for first stdoutredirect parsed_arr[0] is alwyas the first
+                                                        char corrected_path[MAX_INPUT_ARR_LEN];
+                                                        if (search_in_export_path_when_pipes(export_head, cmd_to_check, char_arg_len, corrected_path) == 0) {
+                                                                if (DEBUG==1) {
+                                                                        printf("Command was found and full corrected path is %s and cmd_to_check is %s\n", corrected_path, cmd_to_check);
+                                                                }
+                                                        }
+                                                        /* Error in cmds and not found in path so return -1 */
+                                                        else {
+                                                                if (DEBUG==1) {
+                                                                        printf("Command was not found and cmd_to_check is %s \n", cmd_to_check );
+                                                                }
+                                                                exit(1);
+                                                        }
+
+                                                        fclose(stdout_fwrite);
+                                                        execve(&corrected_path[0], cmd_to_run, env_var);
+                                                        perror("execve");
+                                                        exit(1);
+                                                }
+
+                                                /* If there is a need for next piping if > is not the last pipe
+                                                    i.e. cat < history.txt 1> process.txt 2> error.txt */
+                                                if (remaining_pipes_to_be_handled > 0) {
+                                                        dup2(new_fds[WRITE], WRITE);
+                                                        close(new_fds[READ]);
+                                                        close(new_fds[WRITE]);
+                                                }
+
+                                                /* In This case > is the last pipe
+                                                   i.e. cat < history.txt 1> new.txt
+                                                   getc(stdin) gets stdin one char at a time till EOF
+                                                   fgets() cannot be used as it terminates at newline chars */
+                                                int ch = getc(stdin);
+                                                while (ch != EOF && ch != '\0')
+                                                {
+                                                        /* save from stdin to stdout stream */
+                                                        putc(ch, stdout_fwrite);
+                                                        ch = getc(stdin);
+                                                }
+
+                                                if (feof(stdin)) {
+                                                        if (DEBUG==1) {printf("End of file reached.\n"); }
+                                                }
+                                                else {
+                                                        if (DEBUG ==1 ) {printf("Something went wrong.\n");}
+                                                        exit(1);
+                                                }
+                                                fclose(stdout_fwrite);
+                                                exit(0);
+                                        }
+                                        /* Parent */
+                                        else {
+                                                /* if there was a previous cmd */
+                                                if (cur_pipe_being_handled > 2) {
+                                                        close(old_fds[READ]);
+                                                        close(old_fds[WRITE]);
+                                                }
+                                                /* if there is a need for next piping */
+                                                if (remaining_pipes_to_be_handled > 0) {
+                                                        old_fds[READ] = new_fds[READ];
+                                                        old_fds[WRITE] = new_fds[WRITE];
+                                                }
+                                        }
                                 }
                                 else if (parsed_arr[cmd_pos][0] == '>' && parsed_arr[cmd_pos][1] == '>') {
                                         // stdout append redirection >>
+                                        ///////////////////////////* redirecting append stdout *//////////////////////////////////////////
+                                        cur_pipe_being_handled += 1;
+                                        remaining_pipes_to_be_handled -= 1;
+
+                                        fork_pid = fork();
+                                        if ( fork_pid < 0 ) {
+                                                perror("fork");
+                                                exit(1);
+                                        }
+                                        /* Child process */
+                                        else if (fork_pid == 0) {
+                                                FILE *stdout_fwrite = fopen(parsed_arr[cmd_pos+1], "a+");
+
+                                                /* if there was a previous cmd
+                                                   i.e. grep main < history.txt >> new.txt */
+                                                if (cur_pipe_being_handled > 2) {
+                                                        dup2(old_fds[READ], READ);
+                                                        close(old_fds[READ]);
+                                                        close(old_fds[WRITE]);
+                                                }
+                                                /* if > is the first pipe
+                                                   i.e. ps -a >> process.txt */
+                                                else {
+                                                        dup2(fileno(stdout_fwrite), WRITE);
+
+                                                        /* For running execve in the given form
+                                                           execve(path, cmd_to_run, env_var); */
+                                                        start_index = 0;
+                                                        end_index = cmd_pos;
+                                                        char *cmd_to_run[MAX_INPUT_ARR_LEN];
+                                                        for (int i = start_index; i < end_index; i++) {
+                                                                cmd_to_run[i] = parsed_arr[i];
+                                                        }
+                                                        cmd_to_run[end_index] = NULL;
+
+                                                        /* Seeting up the correct path
+                                                           if the cmd_to_check i.e. grep is found in env_var path
+                                                           corrected_path is set to /usr/bin/grep or /bin/ps */
+                                                        char *cmd_to_check = parsed_arr[0]; // Assuming for first stdoutredirect parsed_arr[0] is alwyas the first
+                                                        char corrected_path[MAX_INPUT_ARR_LEN];
+                                                        if (search_in_export_path_when_pipes(export_head, cmd_to_check, char_arg_len, corrected_path) == 0) {
+                                                                if (DEBUG==1) {
+                                                                        printf("Command was found and full corrected path is %s and cmd_to_check is %s\n", corrected_path, cmd_to_check);
+                                                                }
+                                                        }
+                                                        /* Error in cmds and not found in path so return -1 */
+                                                        else {
+                                                                if (DEBUG==1) {
+                                                                        printf("Command was not found and cmd_to_check is %s \n", cmd_to_check );
+                                                                }
+                                                                exit(1);
+                                                        }
+
+                                                        fclose(stdout_fwrite);
+                                                        execve(&corrected_path[0], cmd_to_run, env_var);
+                                                        perror("execve");
+                                                        exit(1);
+                                                }
+
+                                                /* If there is a need for next piping if >> is not the last pipe
+                                                    i.e. cat < history.txt >> process.txt 2> error.txt */
+                                                if (remaining_pipes_to_be_handled > 0) {
+                                                        dup2(new_fds[WRITE], WRITE);
+                                                        close(new_fds[READ]);
+                                                        close(new_fds[WRITE]);
+                                                }
+
+                                                /* In This case >> is the last pipe
+                                                   i.e. cat < history.txt >> 8new.txt
+                                                   getc(stdin) gets stdin one char at a time till EOF
+                                                   fgets() cannot be used as it terminates at newline chars */
+                                                int ch = getc(stdin);
+                                                while (ch != EOF && ch != '\0')
+                                                {
+                                                        /* save from stdin to stdout stream */
+                                                        putc(ch, stdout_fwrite);
+                                                        ch = getc(stdin);
+                                                }
+
+                                                if (feof(stdin)) {
+                                                        if (DEBUG==1) {printf("End of file reached.\n"); }
+                                                }
+                                                else {
+                                                        if (DEBUG ==1 ) {printf("Something went wrong.\n");}
+                                                        exit(1);
+                                                }
+                                                fclose(stdout_fwrite);
+                                                exit(0);
+                                        }
+                                        /* Parent */
+                                        else {
+                                                /* if there was a previous cmd */
+                                                if (cur_pipe_being_handled > 2) {
+                                                        close(old_fds[READ]);
+                                                        close(old_fds[WRITE]);
+                                                }
+                                                /* if there is a need for next piping */
+                                                if (remaining_pipes_to_be_handled > 0) {
+                                                        old_fds[READ] = new_fds[READ];
+                                                        old_fds[WRITE] = new_fds[WRITE];
+                                                }
+                                        }
                                 }
                                 else {
                                         /*Error in redirection*/
