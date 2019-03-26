@@ -125,7 +125,9 @@ int error_whole_arg_check(char *parsed_arr[], int char_arg_len) {
                             ((parsed_arr[cmd_pos][0] == '2' && parsed_arr[cmd_pos][1] == '>')) ||
                             ((parsed_arr[cmd_pos][0] == '1' && parsed_arr[cmd_pos][1] == '>'))) {
                                 if (error_check_pipe(parsed_arr, char_arg_len, cmd_pos) == 0 ) {
-                                        printf("No errors\n");
+                                        if (DEBUG == 1) {
+                                                printf("No errors\n");
+                                        }
                                 }
                                 else {
                                         if (DEBUG == 1) {
