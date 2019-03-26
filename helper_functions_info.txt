@@ -24,6 +24,41 @@
         close(old_fds[0])
         close(old_fds[1])
 
+        
+        ////////////////
+        // PARSER PART//
+        ////////////////
+
+        char *parsed_arr[MAX_INPUT_ARR_LEN];
+        char *user_input ="cat < history.txt | grep man | grep foo | grep dog | grep bar > newer.txt";
+        // printf("User input is %s\n", user_input);
+        int ptr_pos = 0;
+        int char_arg_len=0;
+
+        static char temp_input[MAX_CMD_INPUT_BUFFER];
+        strcpy(temp_input, user_input);
+        char *temp_cmd_arg_holder[MAX_CMD_INPUT_BUFFER];
+        temp_cmd_arg_holder[ptr_pos] = strtok(temp_input, " ");
+        parsed_arr[ptr_pos] = temp_cmd_arg_holder[0];
+        while (parsed_arr[ptr_pos] != NULL)
+        {
+                char_arg_len++;
+                temp_cmd_arg_holder[++ptr_pos] = strtok(NULL, " ");
+                if (temp_cmd_arg_holder[ptr_pos] == NULL) {
+                        break;
+                }
+                parsed_arr[ptr_pos] = temp_cmd_arg_holder[ptr_pos];
+
+        }
+
+        // Creating test export head
+        struct Node *export_head = NULL;
+        export_head = malloc(sizeof(Node));
+        export_head->next = malloc(sizeof(Node));
+
+        strcpy(export_head->content, "PATH=/bin:/usr/bin");
+        strcpy(export_head->next->content, "TERM=xterm-256color");
+        export_head->next->next = NULL;
 
 
 // Helper debug code print for pipe.c
