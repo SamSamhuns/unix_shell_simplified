@@ -54,7 +54,7 @@ int main()
 {
         // PARSER PART
         char *parsed_arr[MAX_INPUT_ARR_LEN];
-        char *user_input ="!55 < history.txt ";//"| grep main > newer.txt";//"cat < history.txt  > new.txt"; //|  grep exit";// |     grep hoe 2> error.txt";
+        char *user_input ="grep main < history.txt > new.txt ";//cat < history.txt | grep main";//ps -a | grep bash > saver.txt";//"| grep main > newer.txt";//"cat < history.txt  > new.txt"; //|  grep exit";// |     grep hoe 2> error.txt";
         int ptr_pos = 0;
         int char_arg_len=0;
 
@@ -74,8 +74,19 @@ int main()
 
         }
 
+        // Creating test export head
+        struct Node *export_head = NULL;
+        export_head = malloc(sizeof(Node));
+        export_head->next = malloc(sizeof(Node));
+
+        strcpy(export_head->content, "PATH=/bin:/usr/bin");
+        strcpy(export_head->next->content, "TERM=xterm-256color");
+        export_head->next->next = NULL;
+
         // PARSER PART END
         char *env_var[] = {"PATH=/bin:/usr/bin", NULL};
+
+
         // char *dir_loop[] = {"/bin/", "/usr/bin/"};
         // for (int j = 0; j < char_arg_len; j++) {
         //         printf("STRING being checked is %s\n",parsed_arr[j] );
@@ -208,6 +219,18 @@ int main()
                                                 close(new_fds[WRITE]);
                                         }
 
+                                        /* For running execve in the given form
+                                           execve(path, cmd_to_run, env_var);
+                                           grep main < history.txt */
+                                        start_index = 0;
+                                        end_index = cmd_pos;
+                                        char *cmd_to_run[MAX_INPUT_ARR_LEN];
+                                        for (int i = start_index; i < end_index; i++) {
+                                                cmd_to_run[i] = parsed_arr[i];
+                                        }
+                                        cmd_to_run[end_index] = NULL;
+
+
                                         /* Checking for built-in cmds
                                             parsed_arr[0] is always checked
                                             and only 7 built-ins checked for now*/
@@ -215,26 +238,18 @@ int main()
                                                 if (strcmp(built_in_cmd_arr[i], parsed_arr[0]) == 0)
                                                 {
                                                         printf("FOUND!!!\n");
+                                                        fclose(stdin_fread);
                                                         exit(1);
                                                 }
                                                 if (strlen(built_in_cmd_arr[i]) == 1) {
-                                                       if ( parsed_arr[0][0] == '!') {
-                                                         printf("exclamantion found %c sdf\n", parsed_arr[0][0]);
-                                                       }
-                                                       exit(1);
+                                                        if ( parsed_arr[0][0] == '!') {
+                                                                printf("exclamantion found %c sdf\n", parsed_arr[0][0]);
+                                                        }
+                                                        fclose(stdin_fread);
+                                                        exit(1);
                                                 }
                                         }
 
-                                        /* For running execve in the given form
-                                           execve(path, cmd_to_run, env_var);
-                                           grep main < history.txt */
-                                        start_index = 0;
-                                        end_index = cmd_pos;
-                                        char *cmd_to_run[MAX_INPUT_ARR_LEN];
-                                        for (int i = 0; i < end_index; i++) {
-                                                cmd_to_run[i] = parsed_arr[i];
-                                        }
-                                        cmd_to_run[end_index] = NULL;
 
                                         //////////////////////////////////////////////////////////////////////
                                         //////////// TODO MUST BE CHANGED IN MAIN FUNC ///////////////////////
@@ -272,7 +287,7 @@ int main()
                                         FILE *stdout_fwrite = fopen(parsed_arr[cmd_pos+1], "w");
 
                                         /* if there was a previous cmd
-                                           i.e. cat < history.txt > new.txt */
+                                           i.e. grep main < history.txt > new.txt */
                                         if (cur_pipe_being_handled > 2) {
                                                 dup2(old_fds[READ], READ);
                                                 close(old_fds[READ]);
@@ -289,7 +304,7 @@ int main()
                                                 start_index = 0;
                                                 end_index = cmd_pos;
                                                 char *cmd_to_run[MAX_INPUT_ARR_LEN];
-                                                for (int i = 0; i < end_index; i++) {
+                                                for (int i = start_index; i < end_index; i++) {
                                                         cmd_to_run[i] = parsed_arr[i];
                                                 }
                                                 cmd_to_run[end_index] = NULL;
@@ -361,8 +376,12 @@ int main()
                                 }
                                 /* Child process */
                                 else if (fork_pid == 0) {
+                                        int new_fds_pipe_set_check = 0; // var to check if new_fds has been set already
+
                                         /* if there is a need for next piping */
                                         if (remaining_pipes_to_be_handled > 0) {
+                                                printf("Redirection already done\n" );
+                                                // new_fds_pipe_set_check = 1;
                                                 dup2(new_fds[WRITE], WRITE);
                                                 close(new_fds[READ]);
                                                 close(new_fds[WRITE]);
@@ -371,12 +390,13 @@ int main()
                                            i.e. cat < history.txt | grep main
                                                 ps | grep apache2 | grep 2 (For second pipe here)*/
                                         if (cur_pipe_being_handled > 2) {
+                                                printf("THIS INPUT SHOULD BE PRESENT!\n");
                                                 dup2(old_fds[READ], READ);
                                                 close(old_fds[READ]);
                                                 close(old_fds[WRITE]);
                                         }
                                         /* if | is the first pipe
-                                           i.e. ps -a | grep main
+                                           i.e. ps -a | grep bash
                                            For this we need a grandchild process */
                                         else {
                                                 int lead_pipe_fds[2];
@@ -396,11 +416,13 @@ int main()
                                                         close(lead_pipe_fds[WRITE]);
 
                                                         /* For running execve in the given form
-                                                           execve(path, cmd_to_run, env_var); */
+                                                           execve(path, cmd_to_run, env_var);
+                                                           for cmd before |
+                                                           ps -a | grep bash */
                                                         start_index = 0;
                                                         end_index = cmd_pos;
                                                         char *cmd_to_run[MAX_INPUT_ARR_LEN];
-                                                        for (int i = 0; i < end_index; i++) {
+                                                        for (int i = start_index; i < end_index; i++) {
                                                                 cmd_to_run[i] = parsed_arr[i];
                                                         }
                                                         cmd_to_run[end_index] = NULL;
@@ -436,13 +458,38 @@ int main()
                                                                 exit(1);
                                                         }
 
+                                                        /* For running execve in the given form
+                                                           execve(path, cmd_to_run, env_var);
+                                                           for cmd before |
+                                                           ps -a | grep bash */
+                                                        start_index = cmd_pos + 1;
+
+                                                        /* if no other pipes afer first pipe */
+                                                        if ( remaining_pipes_to_be_handled <= 0) {
+                                                                end_index = char_arg_len;
+                                                        }
+                                                        /* if other pipes remina to be executed
+                                                           i.e. ps -a | grep bash > output.txt
+                                                           pipes_loc = {2, 2, 5}*/
+                                                        else {
+                                                                end_index = pipes_loc[cur_pipe_being_handled];
+                                                        }
+
+                                                        char *cmd_to_run[MAX_INPUT_ARR_LEN];
+                                                        int cmd_added_index = 0; // to denote index of cmd_to_run
+                                                        for (int i = start_index; i < end_index; i++) {
+                                                                cmd_to_run[cmd_added_index] = parsed_arr[i];
+                                                                cmd_added_index += 1;
+                                                        }
+                                                        cmd_to_run[cmd_added_index] = NULL;
+
                                                         //////////////////////////////////////////////////////////////////////
                                                         //////////// TODO MUST BE CHANGED IN MAIN FUNC ///////////////////////
                                                         /////////////////////SUPPORT FOR BUILT IN/////////////////////////////
-                                                        char *cmd_to_run[MAX_INPUT_ARR_LEN];
-                                                        cmd_to_run[0] = "grep";
-                                                        cmd_to_run[1] = "main";
-                                                        cmd_to_run[2] = NULL;
+                                                        // char *cmd_to_run[MAX_INPUT_ARR_LEN];
+                                                        // cmd_to_run[0] = "grep";
+                                                        // cmd_to_run[1] = "bash";
+                                                        // cmd_to_run[2] = NULL;
                                                         char *path = "/usr/bin/grep";
 
                                                         execve(path, cmd_to_run, env_var);
@@ -455,15 +502,63 @@ int main()
                                                 }
                                         }
 
+                                        /* if there was a previous cmd / pipe
+                                           i.e. cat < history.txt | grep main*/
+
+                                        // if new_fds pipe redirection has not been set already
+                                        // if ( new_fds_pipe_set_check == 0 ) {
+                                        //         dup2(new_fds[WRITE], WRITE);
+                                        //         close(new_fds[READ]);
+                                        //         close(new_fds[WRITE]);
+                                        // }
+
+                                        /* For calculating the start index */
+                                        start_index = cmd_pos + 1;
+
+                                        /* if no other pipes afer pipe */
+                                        if ( remaining_pipes_to_be_handled <= 0) {
+                                                end_index = char_arg_len;
+                                        }
+                                        /* if other pipes remian to be executed
+                                           i.e. cat < history.txt | grep main | grep boo > saver.txt
+                                           pipes_loc = {4, 1, 3, 6, 9}*/
+                                        else {
+                                                end_index = pipes_loc[cur_pipe_being_handled];
+                                        }
+
+                                        char *cmd_to_run[MAX_INPUT_ARR_LEN];
+                                        int cmd_added_index = 0;    // to denote index of cmd_to_run
+                                        for (int i = start_index; i < end_index; i++) {
+                                                cmd_to_run[cmd_added_index] = parsed_arr[i];
+                                                cmd_added_index += 1;
+                                        }
+                                        cmd_to_run[cmd_added_index] = NULL;
+
+                                        for (size_t i = 0; i < cmd_added_index; i++) {
+                                                printf("%s_____",cmd_to_run[i]);
+                                        }
+
+
                                         //////////////////////////////////////////////////////////////////////
                                         //////////// TODO MUST BE CHANGED IN MAIN FUNC ///////////////////////
                                         /////////////////////SUPPORT FOR BUILT IN/////////////////////////////
-                                        char *cmd_to_run[MAX_INPUT_ARR_LEN];
-                                        cmd_to_run[0] = "grep";
-                                        cmd_to_run[1] = "main";
-                                        cmd_to_run[2] = NULL;
-                                        char *path = "/usr/bin/grep";
+                                        // char *cmd_to_run[MAX_INPUT_ARR_LEN];
+                                        // cmd_to_run[0] = "grep";
+                                        // cmd_to_run[1] = "main";
+                                        // cmd_to_run[2] = NULL;
 
+                                        int ch = getc(stdin);
+                                        printf("Before std in loop\n");
+                                        while (ch != EOF && ch != '\0')
+                                        {
+                                                /* save from stdin to stdout stream */
+                                                printf("hello inside char input \n");
+                                                putc(ch, stdout);
+                                                ch = getc(stdin);
+                                        }
+
+                                        char *path = "/usr/bin/grep";
+                                        printf("WE SHOULD BE HERE \n" );
                                         execve(path, cmd_to_run, env_var);
                                         perror("execve");
                                         exit(1);
@@ -511,7 +606,7 @@ int main()
                                 // stdout append redirection >>
                         }
                         else {
-                                /*TODO*/
+                                /*Error in redirection*/
                                 if (DEBUG == 1) {
                                         printf("Error in two char redirection\n" );
                                 }
@@ -524,7 +619,8 @@ int main()
                         }
                 }
                 /* Parent always closes old fds */
-
+                // close(new_fds[READ]);
+                // close(new_fds[WRITE]);
 
                 /* Parent checks if child process terminated correctly */
                 int rtnStatus;
@@ -543,6 +639,101 @@ int main()
         /* Control should not reach here */
         if (DEBUG==1) {printf("CONTORL SHOULD NOT GET HERE \n");}
         return -2;
+}
+
+NEED char *path = "/usr/bin/grep";
+
+/* cmd_to_check might be grep or ps or other cmd
+    On success return 0 ans corrected_path is set something like /usr/bin/grep
+    Given /usr/bin is in the export path
+    otherwise functions returns -1 and corrected_path will be set to NULL */
+int search_in_export_path_when_pipes( struct Node *export_head, char *cmd_to_check, int char_arg_len, char *corrected_path) {
+        struct Node *cur = export_head;
+        while (cur != NULL) {
+                static char *export_var_array[2]; /* To hold env var name and value */
+                static char *export_var_array_paths[MAX_INPUT_KWRD_LEN]; /* to hold
+                                                                            different paths in the env var values */
+                int num_of_paths = 0; /* number of paths in the env_var */
+                int path_iter = 0; /* for iteration splitting using strtok */
+                static char temp_store[MAX_INPUT_KWRD_LEN]; /* temp store to make contents
+                                                               of the export linked list are not modified */
+
+                strcpy(temp_store, cur->content);
+                export_var_array[0] = strtok(temp_store, "=");
+                export_var_array[1] = strtok(NULL, "=");
+                if (export_var_array[1] == NULL) {
+                        cur = cur->next;
+                        continue;
+                }
+
+                /* split using the colon as the delimiter and store it in
+                   export_var_array_paths */
+                export_var_array_paths[path_iter] = strtok(export_var_array[1], ":");
+                while (export_var_array_paths[path_iter] != NULL) {
+                        num_of_paths++;
+                        export_var_array_paths[++path_iter] = strtok(NULL, ":");
+                }
+
+                for (size_t i = 0; i < num_of_paths; i++) {
+                        /* temp_path_holder is required as doing strcat to export_var_array_paths elems
+                           destroys the later elements of the export_var_array_paths char ptr array*/
+                        char temp_path_holder[MAX_CMD_INPUT_BUFFER];
+
+                        strcpy(temp_path_holder, export_var_array_paths[i]);
+                        /* Add a front slash if it is not present in the path name */
+                        if ( temp_path_holder[strlen(export_var_array_paths[i])-1] != '/' ) {
+                                strcat(temp_path_holder, "/");
+                        }
+                        int result;
+                        result  = search_dir_when_pipes(temp_path_holder, cmd_to_check, char_arg_len, export_head, corrected_path);
+
+                        if (result== 0) {
+                                return 0;
+                        }
+                }
+                cur = cur->next;
+        }
+        corrected_path = NULL;
+        return -1;
+}
+
+int search_dir_when_pipes(char *dir_path, char *cmd_to_check, int char_arg_len,  struct Node *export_head, char *corrected_path) {
+        struct dirent *dir_entry; // define struct for a ptr for entering directory
+        DIR *dir_read = opendir(dir_path); // returns a ptr of type DIR
+        // pid_t pid, wait_pid; // to hold process pids
+        // int status = 0;
+
+        /* if the directory specified by the path couldn't be opened */
+        if (dir_read == NULL) {
+                // printf("Error: could not open path directory\n");
+                return -1;
+        }
+
+        /* Adding a NULL ptr to the end of parsed_arr for argv being sent to exceve */
+        parsed_arr[char_arg_len] = NULL;
+
+        if ( (cmd_to_check[0] == '.' && cmd_to_check[1] == '/') || cmd_to_check[0] == '/') {
+                strcpy();
+                return 0;
+        }
+
+        while ((dir_entry = readdir(dir_read)) != NULL) {
+                if ((strcmp(dir_entry->d_name, cmd_to_check)) == 0) {
+
+                        /* EXECV OPERATION */
+                        // parsed_arr[0] is the external cmd that has been entered i.e. ls
+                        strcat(dir_path, parsed_arr[0]);
+
+
+
+                        if (fork_and_execve(dir_path, parsed_arr, export_head) == 0) {
+                                closedir(dir_read);
+                                return 0;
+                        }
+                }
+        }
+        closedir(dir_read);
+        return -1;
 }
 
 int error_whole_arg_check(char *parsed_arr[], int char_arg_len) {
