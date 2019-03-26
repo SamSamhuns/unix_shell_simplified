@@ -11,6 +11,32 @@
 #define READ 0
 #define WRITE 1
 
+/* General pseudo code logic for pipes in loops
+   for cmd in cmds
+    if there is a next cmd
+        pipe(new_fds)
+    fork
+    if child
+        if there is a previous cmd
+            dup2(old_fds[0], 0)
+            close(old_fds[0])
+            close(old_fds[1])
+        if there is a next cmd
+            close(new_fds[0])
+            dup2(new_fds[1], 1)
+            close(new_fds[1])
+        exec cmd || die
+    else
+        if there is a previous cmd
+            close(old_fds[0])
+            close(old_fds[1])
+        if there is a next cmd
+            old_fds = new_fds
+   if there are multiple cmds
+    close(old_fds[0])
+    close(old_fds[1])
+ */
+
 /* Checks if piping or redirection has been entered in the input cmd
    And if pipes were present then return value if greater than 1 and reprs the
    total number of pipes found
@@ -28,7 +54,7 @@ int main()
 {
         // PARSER PART
         char *parsed_arr[MAX_INPUT_ARR_LEN];
-        char *user_input = "cat < history.txt |  grep exit";// |     grep hoe 2> error.txt";
+        char *user_input ="!55 < history.txt ";//"| grep main > newer.txt";//"cat < history.txt  > new.txt"; //|  grep exit";// |     grep hoe 2> error.txt";
         int ptr_pos = 0;
         int char_arg_len=0;
 
@@ -50,35 +76,35 @@ int main()
 
         // PARSER PART END
         char *env_var[] = {"PATH=/bin:/usr/bin", NULL};
-        char *dir_loop[] = {"/bin/", "/usr/bin/"};
-        for (int j = 0; j < char_arg_len; j++) {
-                printf("STRING being checked is %s\n",parsed_arr[j] );
-                if (strcmp(parsed_arr[j], "<") == 0 ||
-                    strcmp(parsed_arr[j], ">") == 0 ||
-                    strcmp(parsed_arr[j], "|") == 0 ||
-                    strcmp(parsed_arr[j], ">>") == 0 ||
-                    strcmp(parsed_arr[j], "2>") == 0 ||
-                    strcmp(parsed_arr[j], "1>") == 0) {
-                        /* pass this check */
-                        printf("Pipes not checked in path \n" );
-                        continue;
-                }
-
-                for (int i = 0; i < 2; i++) {
-                        char checker[100];
-                        // checker = strdup(dir_loop[i]);
-                        strcpy(checker, dir_loop[i]);
-                        strcat(checker, parsed_arr[j]);
-                        printf("VALUE OF CHECKER is %s\n",checker );
-                        if (access(checker, X_OK | F_OK)==0) {
-                                printf("Accessible cmd %s\n",parsed_arr[j] );
-                                break;
-                        }
-                        else {
-                                printf("%s is not accessible \n",parsed_arr[j] );
-                        }
-                }
-        }
+        // char *dir_loop[] = {"/bin/", "/usr/bin/"};
+        // for (int j = 0; j < char_arg_len; j++) {
+        //         printf("STRING being checked is %s\n",parsed_arr[j] );
+        //         if (strcmp(parsed_arr[j], "<") == 0 ||
+        //             strcmp(parsed_arr[j], ">") == 0 ||
+        //             strcmp(parsed_arr[j], "|") == 0 ||
+        //             strcmp(parsed_arr[j], ">>") == 0 ||
+        //             strcmp(parsed_arr[j], "2>") == 0 ||
+        //             strcmp(parsed_arr[j], "1>") == 0) {
+        //                 /* pass this check */
+        //                 printf("Pipes not checked in path \n" );
+        //                 continue;
+        //         }
+        //
+        //         for (int i = 0; i < 2; i++) {
+        //                 char checker[100];
+        //                 // checker = strdup(dir_loop[i]);
+        //                 strcpy(checker, dir_loop[i]);
+        //                 strcat(checker, parsed_arr[j]);
+        //                 printf("VALUE OF CHECKER is %s\n",checker );
+        //                 if (access(checker, X_OK | F_OK)==0) {
+        //                         printf("Accessible cmd %s\n",parsed_arr[j] );
+        //                         break;
+        //                 }
+        //                 else {
+        //                         printf("%s is not accessible \n",parsed_arr[j] );
+        //                 }
+        //         }
+        // }
 
 
 
@@ -89,13 +115,15 @@ int main()
         pid_t wait_pid;
         int fork_pid;
         int child_status = 0;
-        int start_cmd_index = 0;
-        int end_cmd_index = 0;
+        int start_index = 0; // for delimiting start of execve cmd_args
+        int end_index = 0; // for delimiting start of execve cmd_args
         int pipes_loc[MAX_INPUT_ARR_LEN];
-        int cur_pipe_being_handled = 1; // Index of current pipe being handled
+        int cur_pipe_being_handled = 1; // (Not 0 indexed) Index of current pipe being handled starts woth 1
         int remaining_pipes_to_be_handled = -1;
-        int fd_pipe_new[2]; // for piping
-        int fd_pipe_old[2]; // for piping
+        int new_fds[2]; // for piping
+        int old_fds[2]; // for piping
+        char *built_in_cmd_arr[] = {"cd", "pwd", "exit", "pwd", "history", "export", "!", "\0"};
+
         parsed_arr[char_arg_len] = NULL;
 
         if  (check_pipe_rtn_loc(parsed_arr, char_arg_len, pipes_loc)== 0) {
@@ -108,11 +136,12 @@ int main()
                         if (DEBUG==1) printf("Loc of pipes %i\n", pipes_loc[i] );
                 }
         }
-        printf("Length of args %i and length of pipe is %i\n",char_arg_len, pipes_loc[0] ); // 11
+        printf("Num of args %i and num of pipe is %i\n",char_arg_len, pipes_loc[0] ); // 11
         remaining_pipes_to_be_handled = pipes_loc[0];
+        int cmd_pos = pipes_loc[1]; // index location of first pipe cmd
 
-        // TRY_AND_CATCH(pipe(fd_pipe_old), "pipe");
-
+        /* This declarartion might be optional */
+        /* TRY_AND_CATCH(pipe(old_fds), "pipe"); */
 
         /* Checking for errors */
         if (error_whole_arg_check(parsed_arr, char_arg_len) == 0 ) {
@@ -122,33 +151,36 @@ int main()
                 return -1;
         }
 
-        printf("WE GET HERE\n" );
-
-
         /* it is assumed that spaces have been provided between cmds */
-        for (int cmd_pos = 0; cmd_pos < char_arg_len; cmd_pos++) {
-                looplen = strlen(parsed_arr[cmd_pos]);
-
-                /* If there are more pipes to be handled*/
+        /* When space is provided between redirects and pipes i.e. cat > file.txt
+           instead of cat>file.txt */
+        for (int i = 1; i < pipes_loc[0]+2; i++) {
                 if (remaining_pipes_to_be_handled > 0) {
-                        TRY_AND_CATCH(pipe(fd_pipe_new), "pipe");
+                        TRY_AND_CATCH(pipe(new_fds), "pipe");
                 }
                 else {
                         /* no more pipes to handle */
                         /* return with success */
                         /* Wait till all child processes are terminated */
-                        close(fd_pipe_new[READ]);
-                        close(fd_pipe_new[WRITE]);
-                        close(fd_pipe_old[READ]);
-                        close(fd_pipe_old[WRITE]);
+                        close(new_fds[READ]);
+                        close(new_fds[WRITE]);
+                        close(old_fds[READ]);
+                        close(old_fds[WRITE]);
 
                         /** wait till all children have terminated */
                         while ((wait_pid=wait(&child_status)) > 0);
                         return 0;
                 }
+                /* pipes_loc has the index of pipes [4, 1, 3, 6, 9]
+                   pipes_loc[0] is the number of pipes so we start with i = 1
+                   we access each pipe directly skipping other commands */
+                cmd_pos = pipes_loc[i];
+                looplen = strlen(parsed_arr[cmd_pos]);
 
-                /* When space is provided between redirects and pipes i.e. cat > file.txt
-                   instead of cat>file.txt */
+                if (DEBUG == 1) {
+                        printf("%s\n",parsed_arr[cmd_pos] );
+                }
+
                 if (looplen == 1) {
                         if (parsed_arr[cmd_pos][0] == '<') {
                                 // stdin redirection
@@ -164,38 +196,64 @@ int main()
                                 else if (fork_pid == 0) {
                                         FILE *stdin_fread = fopen(parsed_arr[cmd_pos+1], "r");
 
-
                                         /* All dup2 should be done in the child */
                                         dup2(fileno(stdin_fread), READ);
 
+                                        /* < stdin redirect will always be the first pipe */
+
                                         /* if there is a next pipe cmd */
                                         if (remaining_pipes_to_be_handled > 0) {
-                                                dup2(fd_pipe_new[WRITE], WRITE);
+                                                dup2(new_fds[WRITE], WRITE);
+                                                close(new_fds[READ]);
+                                                close(new_fds[WRITE]);
                                         }
-                                        close(fd_pipe_new[READ]);
-                                        close(fd_pipe_new[WRITE]);
 
+                                        /* Checking for built-in cmds
+                                            parsed_arr[0] is always checked
+                                            and only 7 built-ins checked for now*/
+                                        for (int i = 0; i < 7; i++) {
+                                                if (strcmp(built_in_cmd_arr[i], parsed_arr[0]) == 0)
+                                                {
+                                                        printf("FOUND!!!\n");
+                                                        exit(1);
+                                                }
+                                                if (strlen(built_in_cmd_arr[i]) == 1) {
+                                                       if ( parsed_arr[0][0] == '!') {
+                                                         printf("exclamantion found %c sdf\n", parsed_arr[0][0]);
+                                                       }
+                                                       exit(1);
+                                                }
+                                        }
+
+                                        /* For running execve in the given form
+                                           execve(path, cmd_to_run, env_var);
+                                           grep main < history.txt */
+                                        start_index = 0;
+                                        end_index = cmd_pos;
                                         char *cmd_to_run[MAX_INPUT_ARR_LEN];
-                                        cmd_to_run[0] = parsed_arr[cmd_pos-1];
-                                        cmd_to_run[1] = NULL;
-                                        char *path = "/bin/cat";
+                                        for (int i = 0; i < end_index; i++) {
+                                                cmd_to_run[i] = parsed_arr[i];
+                                        }
+                                        cmd_to_run[end_index] = NULL;
+
+                                        //////////////////////////////////////////////////////////////////////
+                                        //////////// TODO MUST BE CHANGED IN MAIN FUNC ///////////////////////
+                                        /////////////////////SUPPORT FOR BUILT IN/////////////////////////////
+
+
+                                        char *path = "/usr/bin/grep";
 
                                         fclose(stdin_fread);
-
-
                                         execve(path, cmd_to_run, env_var);
                                         perror("execve");
                                         exit(1);
                                 }
                                 /* Parent */
                                 else {
-                                        /* Store the pid of the child to reap later
-                                           cur_pipe_being_handled - 2 equals 0 here since
-                                           we increment cur_pipe_counter by 1 when it was already init to 1
-                                         */
+                                        /* if there is a need for next piping */
                                         if (remaining_pipes_to_be_handled > 0) {
-                                                fd_pipe_old[READ] = fd_pipe_new[READ];
-                                                fd_pipe_old[WRITE] = fd_pipe_new[WRITE];
+                                                old_fds[READ] = new_fds[READ];
+                                                old_fds[WRITE] = new_fds[WRITE];
                                         }
                                 }
                         }
@@ -203,20 +261,238 @@ int main()
                                 /* redirecting stdout */
                                 cur_pipe_being_handled += 1;
                                 remaining_pipes_to_be_handled -= 1;
+
+                                fork_pid = fork();
+                                if ( fork_pid < 0 ) {
+                                        perror("fork");
+                                        exit(1);
+                                }
+                                /* Child process */
+                                else if (fork_pid == 0) {
+                                        FILE *stdout_fwrite = fopen(parsed_arr[cmd_pos+1], "w");
+
+                                        /* if there was a previous cmd
+                                           i.e. cat < history.txt > new.txt */
+                                        if (cur_pipe_being_handled > 2) {
+                                                dup2(old_fds[READ], READ);
+                                                close(old_fds[READ]);
+                                                close(old_fds[WRITE]);
+                                        }
+                                        /* if > is the first pipe
+                                           i.e. ps -a > process.txt */
+                                        else {
+                                                dup2(fileno(stdout_fwrite), WRITE);
+
+
+                                                /* For running execve in the given form
+                                                   execve(path, cmd_to_run, env_var); */
+                                                start_index = 0;
+                                                end_index = cmd_pos;
+                                                char *cmd_to_run[MAX_INPUT_ARR_LEN];
+                                                for (int i = 0; i < end_index; i++) {
+                                                        cmd_to_run[i] = parsed_arr[i];
+                                                }
+                                                cmd_to_run[end_index] = NULL;
+
+                                                //////////////////////////////////////////////////////////////////////
+                                                //////////// TODO MUST BE CHANGED IN MAIN FUNC ///////////////////////
+                                                /////////////////////SUPPORT FOR BUILT IN/////////////////////////////
+                                                char *path = "/bin/ps";
+
+                                                fclose(stdout_fwrite);
+                                                execve(path, cmd_to_run, env_var);
+                                                perror("execve");
+                                                exit(1);
+                                        }
+
+                                        /* if there is a need for next piping
+                                           This section might be optional here */
+                                        if (remaining_pipes_to_be_handled > 0) {
+                                                dup2(fileno(stdout_fwrite), WRITE);
+                                                close(new_fds[READ]);
+                                                close(new_fds[WRITE]);
+                                        }
+
+                                        /* This case > is the last pipe cat < history.txt > new.txt
+                                           getc(stdin) gets stdin one char at a time till EOF
+                                           fgets() cannot be used as it terminates at newline chars */
+                                        int ch = getc(stdin);
+                                        while (ch != EOF && ch != '\0')
+                                        {
+                                                /* save from stdin to stdout stream */
+                                                putc(ch, stdout_fwrite);
+                                                ch = getc(stdin);
+                                        }
+
+                                        if (feof(stdin)) {
+                                                if (DEBUG==1) {printf("End of file reached.\n"); }
+                                        }
+                                        else {
+                                                if (DEBUG ==1 ) {printf("Something went wrong.\n");}
+                                                exit(1);
+                                        }
+                                        fclose(stdout_fwrite);
+                                        exit(0);
+                                }
+                                /* Parent */
+                                else {
+                                        /* if there was a previous cmd */
+                                        if (cur_pipe_being_handled > 2) {
+                                                close(old_fds[READ]);
+                                                close(old_fds[WRITE]);
+                                        }
+                                        /* if there is a need for next piping */
+                                        if (remaining_pipes_to_be_handled > 0) {
+                                                old_fds[READ] = new_fds[READ];
+                                                old_fds[WRITE] = new_fds[WRITE];
+                                        }
+                                }
                         }
                         else if (parsed_arr[cmd_pos][0] == '|') {
                                 /* piping  | */
+                                /* redirecting stdout */
                                 cur_pipe_being_handled += 1;
                                 remaining_pipes_to_be_handled -= 1;
+
+                                fork_pid = fork();
+                                if ( fork_pid < 0 ) {
+                                        perror("fork");
+                                        exit(1);
+                                }
+                                /* Child process */
+                                else if (fork_pid == 0) {
+                                        /* if there is a need for next piping */
+                                        if (remaining_pipes_to_be_handled > 0) {
+                                                dup2(new_fds[WRITE], WRITE);
+                                                close(new_fds[READ]);
+                                                close(new_fds[WRITE]);
+                                        }
+                                        /* if there was a previous cmd / pipe
+                                           i.e. cat < history.txt | grep main
+                                                ps | grep apache2 | grep 2 (For second pipe here)*/
+                                        if (cur_pipe_being_handled > 2) {
+                                                dup2(old_fds[READ], READ);
+                                                close(old_fds[READ]);
+                                                close(old_fds[WRITE]);
+                                        }
+                                        /* if | is the first pipe
+                                           i.e. ps -a | grep main
+                                           For this we need a grandchild process */
+                                        else {
+                                                int lead_pipe_fds[2];
+                                                TRY_AND_CATCH(pipe(lead_pipe_fds), "pipe");
+
+                                                // Creating a grandchild here
+                                                pid_t sub_child_pid = fork();
+
+                                                if (sub_child_pid < 0) {
+                                                        perror("fork");
+                                                        exit(1);
+                                                }
+                                                /* Grandchild */
+                                                else if (sub_child_pid == 0 ) {
+                                                        dup2(lead_pipe_fds[WRITE_PIPE], WRITE);
+                                                        close(lead_pipe_fds[READ]);
+                                                        close(lead_pipe_fds[WRITE]);
+
+                                                        /* For running execve in the given form
+                                                           execve(path, cmd_to_run, env_var); */
+                                                        start_index = 0;
+                                                        end_index = cmd_pos;
+                                                        char *cmd_to_run[MAX_INPUT_ARR_LEN];
+                                                        for (int i = 0; i < end_index; i++) {
+                                                                cmd_to_run[i] = parsed_arr[i];
+                                                        }
+                                                        cmd_to_run[end_index] = NULL;
+
+                                                        //////////////////////////////////////////////////////////////////////
+                                                        //////////// TODO MUST BE CHANGED IN MAIN FUNC ///////////////////////
+                                                        /////////////////////SUPPORT FOR BUILT IN/////////////////////////////
+
+                                                        char *path = "/bin/ps";
+
+                                                        execve(path, cmd_to_run, env_var);
+                                                        perror("execve");
+                                                        exit(1);
+
+                                                        // execve();
+                                                        // perror("execve");
+                                                        // exit(1);
+                                                }
+                                                /*  Grandchild's Parent */
+                                                else {
+                                                        dup2(lead_pipe_fds[READ], READ);
+                                                        close(lead_pipe_fds[READ]);
+                                                        close(lead_pipe_fds[WRITE]);
+
+                                                        int retrnStatus;
+                                                        waitpid(fork_pid, &retrnStatus, 0); // Parent process waits here for child to terminate.
+                                                        // Verify child process terminated without error.
+                                                        if (retrnStatus == 0) {
+                                                                // printf("Sub Child terminated normally.\n");
+                                                        }
+                                                        if (retrnStatus == 1) {
+                                                                // printf("Sub Child terminated with an error.\n");
+                                                                exit(1);
+                                                        }
+
+                                                        //////////////////////////////////////////////////////////////////////
+                                                        //////////// TODO MUST BE CHANGED IN MAIN FUNC ///////////////////////
+                                                        /////////////////////SUPPORT FOR BUILT IN/////////////////////////////
+                                                        char *cmd_to_run[MAX_INPUT_ARR_LEN];
+                                                        cmd_to_run[0] = "grep";
+                                                        cmd_to_run[1] = "main";
+                                                        cmd_to_run[2] = NULL;
+                                                        char *path = "/usr/bin/grep";
+
+                                                        execve(path, cmd_to_run, env_var);
+                                                        perror("execve");
+                                                        exit(1);
+
+                                                        // execve();
+                                                        // perror("execve");
+                                                        // exit(1);
+                                                }
+                                        }
+
+                                        //////////////////////////////////////////////////////////////////////
+                                        //////////// TODO MUST BE CHANGED IN MAIN FUNC ///////////////////////
+                                        /////////////////////SUPPORT FOR BUILT IN/////////////////////////////
+                                        char *cmd_to_run[MAX_INPUT_ARR_LEN];
+                                        cmd_to_run[0] = "grep";
+                                        cmd_to_run[1] = "main";
+                                        cmd_to_run[2] = NULL;
+                                        char *path = "/usr/bin/grep";
+
+                                        execve(path, cmd_to_run, env_var);
+                                        perror("execve");
+                                        exit(1);
+                                        // execve(); // run execve
+                                        // perror("execve");
+                                        // exit(1);
+                                }
+                                /* Parent */
+                                else {
+                                        /* if there was a previous cmd */
+                                        if (cur_pipe_being_handled > 2) {
+                                                close(old_fds[READ]);
+                                                close(old_fds[WRITE]);
+                                        }
+                                        /* if there is a need for next piping */
+                                        if (remaining_pipes_to_be_handled > 0) {
+                                                old_fds[READ] = new_fds[READ];
+                                                old_fds[WRITE] = new_fds[WRITE];
+                                        }
+                                }
                         }
                         else {
                                 if (DEBUG == 1) {
                                         printf("Error in one char redirection\n" );
                                 }
-                                close(fd_pipe_new[READ]);
-                                close(fd_pipe_new[WRITE]);
-                                close(fd_pipe_old[READ]);
-                                close(fd_pipe_old[WRITE]);
+                                close(new_fds[READ]);
+                                close(new_fds[WRITE]);
+                                close(old_fds[READ]);
+                                close(old_fds[WRITE]);
                                 /* Must return to main function here*/
                                 return -1;
                         }
@@ -227,28 +503,22 @@ int main()
                 else if (looplen == 2) {
                         if (parsed_arr[cmd_pos][0] == '2' && parsed_arr[cmd_pos][1] == '>') {
                                 // stderr redirection 2>
-                                cur_pipe_being_handled += 1;
-                                remaining_pipes_to_be_handled -= 1;
                         }
                         else if (parsed_arr[cmd_pos][0] == '1' && parsed_arr[cmd_pos][1] == '>') {
                                 // stdout redirection 1>
-                                cur_pipe_being_handled += 1;
-                                remaining_pipes_to_be_handled -= 1;
                         }
                         else if (parsed_arr[cmd_pos][0] == '>' && parsed_arr[cmd_pos][1] == '>') {
                                 // stdout append redirection >>
-                                cur_pipe_being_handled += 1;
-                                remaining_pipes_to_be_handled -= 1;
                         }
                         else {
                                 /*TODO*/
                                 if (DEBUG == 1) {
                                         printf("Error in two char redirection\n" );
                                 }
-                                close(fd_pipe_new[READ]);
-                                close(fd_pipe_new[WRITE]);
-                                close(fd_pipe_old[READ]);
-                                close(fd_pipe_old[WRITE]);
+                                close(new_fds[READ]);
+                                close(new_fds[WRITE]);
+                                close(old_fds[READ]);
+                                close(old_fds[WRITE]);
                                 /* Must return to main function here*/
                                 return -1;
                         }
@@ -262,14 +532,13 @@ int main()
 
                 // Verify child process terminated without error.
                 if (rtnStatus == 0) {
-                        printf("Child terminated normally.");
+                        printf("Child terminated normally.\n");
                 }
                 if (rtnStatus == 1) {
-                        printf("Child terminated with an error!.");
+                        printf("Child terminated with an error.\n");
                         return -1;
                 }
 
-                printf("%s\n",parsed_arr[cmd_pos] );
         }
         /* Control should not reach here */
         if (DEBUG==1) {printf("CONTORL SHOULD NOT GET HERE \n");}
