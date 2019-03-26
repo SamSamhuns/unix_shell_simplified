@@ -8,6 +8,8 @@
 #define READ_PIPE 0 /* Read end of the IPC pipe */
 #define WRITE_PIPE 1 /* Write end of the IPC pipe */
 #define DEBUG 0
+#define READ 0 // For pipes and STDIN_FILENO
+#define WRITE 1 // For pipes and STDOUT_FILENO
 
 /* Boilerplate code for easy error checking
   Example.  if(pipe(fd_pipe) == -1){
