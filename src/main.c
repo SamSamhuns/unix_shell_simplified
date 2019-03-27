@@ -139,7 +139,7 @@ int main(void){
 /* main cmd executing func that runs the right built-in or extern cmd */
 void run_command (int char_arg_len, int arg_order_exclamation, int number_of_args, struct Node *history_head,
                   struct Node *export_head, FILE *fptr, char *user_input, char *parsed_input[] ) {
-	if ((strcmp(parsed_input[0], "exit") == 0) && char_arg_len=1) {
+	if ((strcmp(parsed_input[0], "exit") == 0) && char_arg_len >= 1) {
 		/* the addr of the user_input must be passed to free
 		   the calloced user_input*/
 		exit_cmd_handler(&user_input, history_head, export_head, fptr);
@@ -460,6 +460,12 @@ int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *expor
                         struct Node *history_head, FILE *fptr, char *user_input, int number_of_args,
                         int arg_order_exclamation ) {
 
+	/* forced check if the first command is exit */
+	if (strcmp(parsed_arr[0], "exit") == 0) {
+		/* clean everything and exit immmediately */
+		exit_cmd_handler(&user_input, history_head, export_head, fptr);
+	}
+
 	// executing the entire command inside a child to preserve stdout and stdin descripters for parent shell process
 	pid_t main_pid = fork();
 	if ( main_pid < 0 ) {
@@ -613,12 +619,13 @@ int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *expor
 						/* Checking for built-in cmds
 						   parsed_arr[0] is always checked
 						   and only 7 built-ins checked for now
-						   pwd > current.txt */
+						   !50 < current.txt given !50 = grep main*/
 
 						for (int i = 0; i < 7; i++) {
-							if (strcmp(built_in_cmd_arr[i], parsed_arr[0]) == 0)
+							if ( (strcmp(built_in_cmd_arr[i], parsed_arr[0]) == 0) ||
+							     ((parsed_arr[start_index][0] == '!') &&
+							      (strlen(parsed_arr[start_index]) > 1)))
 							{
-								fprintf(stderr, "FOUND!!!\n");
 								char * built_in_cmds_run[MAX_INPUT_ARR_LEN];
 								int builtin_char_arg_len = 0;
 								for (size_t k = start_index; k < end_index; k++) {
@@ -627,23 +634,10 @@ int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *expor
 								}
 								built_in_cmds_run[builtin_char_arg_len] = "\0";
 
+								fclose(stdin_fread);
 								run_command(builtin_char_arg_len, 0, number_of_args,
 								            history_head, export_head, fptr, user_input, built_in_cmds_run);
-
-								fclose(stdin_fread);
 								exit(0);
-							}
-							if (strlen(built_in_cmd_arr[i]) == 1) {
-								if ( parsed_arr[0][0] == '!') {
-									printf("exclamantion found %c sdf\n", parsed_arr[0][0]);
-
-
-
-
-
-									fclose(stdin_fread);
-									exit(0);
-								}
 							}
 						}
 
@@ -712,6 +706,31 @@ int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *expor
 								cmd_to_run[i] = parsed_arr[i];
 							}
 							cmd_to_run[end_index] = NULL;
+
+							/* Checking for built-in cmds
+							   parsed_arr[0] is always checked
+							   and only 7 built-ins checked for now
+							   pwd > current.txt */
+
+							for (int i = 0; i < 7; i++) {
+								if ((strcmp(built_in_cmd_arr[i], parsed_arr[0]) == 0) ||
+								    ((parsed_arr[0][0] == '!') &&
+								     (strlen(parsed_arr[0]) > 1)) )
+								{
+									char * built_in_cmds_run[MAX_INPUT_ARR_LEN];
+									int builtin_char_arg_len = 0;
+									for (size_t k = start_index; k < end_index; k++) {
+										built_in_cmds_run[k] = parsed_arr[k];
+										builtin_char_arg_len += 1;
+									}
+									built_in_cmds_run[builtin_char_arg_len] = "\0";
+
+									fclose(stdout_fwrite);
+									run_command(builtin_char_arg_len, 0, number_of_args,
+									            history_head, export_head, fptr, user_input, built_in_cmds_run);
+									exit(0);
+								}
+							}
 
 							/* Seeting up the correct path
 							   if the cmd_to_check i.e. grep is found in env_var path
