@@ -36,4 +36,4 @@ $(TARGET): $(OBJECTS)
 .PHONY: clean
 
 clean:
-	rm -rf $(ODIR)/*.o *.DS_Store
+	rm -rf $(ODIR) *.DS_Store $(TARGET) 
