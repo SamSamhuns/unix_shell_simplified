@@ -119,7 +119,7 @@ int main(void){
 		/* When check_pipe_rtn_loc == 0 , there are no pipes so run
 		   so we can run the main run_command function */
 		/* Checking if pipes exist */
-		int temp_pipes_loc[MAX_INPUT_ARR_LEN];         // Just for temporary use and has no use later
+		int temp_pipes_loc[MAX_INPUT_ARR_LEN];  // Just for temporary use and has no use later
 		if  (check_pipe_rtn_loc(parsed_input, char_arg_len, temp_pipes_loc) == 0) {
 			if (DEBUG==1) printf("Pipes were not disovered\n" );                // prints
 			run_command(char_arg_len, arg_order_exclamation, number_of_args, history_head,
@@ -132,34 +132,39 @@ int main(void){
 			/* if piped_return_value == -2, stderr redirection was done */
 			if (piped_return_value == 0) {
 				/* run_piped_commands ran successfully with no erros */
-                if (DEBUG == 1) {
-                    printf("Piped Command ran succesfully\n");
-                }
+				if (DEBUG == 1) {
+					printf("Piped Command ran succesfully\n");
+				}
 			}
 			else if (piped_return_value == -2) {
 				/* stderr has been redirected inside run_piped_commands */
-                /*  Checking if 2> is present in the input cmd
-                    to find the index of the err output file
-        		    when 2> is discovered in code*/
-        		int error_file_create_loc = -1;
-        		for (size_t i = 0; i < char_arg_len; i++) {
-        			if (strlen(parsed_input[i]) == 2) {
-        				if ( parsed_input[i][0] == '2' && parsed_input[i][1] == '>') {
-                            error_file_create_loc = i;
-                            break;
-        				}
-        			}
-        		}
-
-                /* Don't have to worry about errors here as check is done
-                    by run_piped_commands(....) func
-                    if error redirection 2> was found, save the error in chosen file */
-                if (error_file_create_loc != -1) {
-                    FILE *err_fptr = fopen(parsed_input[error_file_create_loc+1], "w");
-                    fprintf(err_fptr, "Command not recognized.\n");
-                    fclose(err_fptr);
-                }
+				/*  Checking if 2> is present in the input cmd
+				    to find the index of the err output file
+				    when 2> is discovered in code*/
+				int error_file_create_loc = -1;
+				for (size_t i = 0; i < char_arg_len; i++) {
+					if (strlen(parsed_input[i]) == 2) {
+						if ( parsed_input[i][0] == '2' && parsed_input[i][1] == '>') {
+							error_file_create_loc = i;
+							break;
+						}
+					}
+				}
+				/* Don't have to worry about errors here as check is done
+				    by run_piped_commands(....) func
+				    if error redirection 2> was found, save the error in chosen file */
+				if (error_file_create_loc != -1) {
+					FILE *err_fptr = fopen(parsed_input[error_file_create_loc+1], "w");
+					fprintf(err_fptr, "Command not recognized.\n");
+					fclose(err_fptr);
+				}
 			}
+            /* execv fails, error already written in file*/
+            else if (piped_return_value == -3) {
+                if (DEBUG == 1) {
+					fprintf(stderr, "Execve fails\n");
+				}
+            }
 			/* without stderr redirection */
 			else {
 				fprintf(stderr, "Command not recognized\n");
@@ -214,6 +219,12 @@ void run_command (int char_arg_len, int arg_order_exclamation, int number_of_arg
 		strcpy(user_input, exclaim_cmd_handler(history_head, arg_order_exclamation));
 		/* returns the total number of args entered for the choosen cmd from history */
 		char_arg_len = parser(user_input, exclaim_parsed_input, strlen(user_input), export_head);
+
+		/* Printing the cmd ! is running from history*/
+		for (size_t i = 0; i < char_arg_len; i++) {
+			printf("%s ", exclaim_parsed_input[i]);
+		}
+		printf("\n");
 
 		run_command(char_arg_len, arg_order_exclamation, number_of_args,
 		            history_head, export_head, fptr, user_input, exclaim_parsed_input);
@@ -536,6 +547,10 @@ int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *expor
 			if (exit_status == 2) {
 				return -2;
 			}
+            /* case for catch missed execve program fails */
+            else if (exit_status == 3) {
+                return -3;
+            }
 		}
 		/* case when there was error in running piped commands */
 		if (rtnStatus != 0) {
@@ -553,7 +568,7 @@ int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *expor
 		char *env_var[MAX_INPUT_ARR_LEN];
 
 		/*  Checking if 2> is present in the input cmd
-            changeable_EXIT_STATUS is set to reflect the exit status of error in inputs
+		    changeable_EXIT_STATUS is set to reflect the exit status of error in inputs
 		    when 2> is discovered in code, changeable_EXIT_STATUS is set to 2*/
 		int changeable_EXIT_STATUS = 1;
 		for (size_t i = 0; i < char_arg_len; i++) {
@@ -1574,13 +1589,23 @@ int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *expor
 			{
 				int exit_status = WEXITSTATUS(rtnStatus);
 				if (DEBUG == 1) {
+					printf("Child terminated while stderr redirect was active\n");
 					printf("Exit status of the child was %d\n",
 					       exit_status);
 				}
-
+				if (exit_status == 0) {
+					if (DEBUG == 1) {
+						printf("Child terminated normally.\n");
+					}
+				}
 				/* Case for std err redirection 2> */
-				if (exit_status == 2) {
+				else if (exit_status == 2) {
 					exit(2);
+				}
+				/* To catch exit status == 1 returned by failed programs running from
+				    execve , when 2> is found, changeable_EXIT_STATUS is always 2 so */
+				else if (changeable_EXIT_STATUS == 2) {
+					exit(3); // exit status of 3 when there is no need for rewriting error file
 				}
 			}
 			// Verify child process terminated without error.
