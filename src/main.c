@@ -3,6 +3,7 @@
    Author Samridha Shrestha
    Feb 2019
  */
+#define _POSIX_SOURCE
 #include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
