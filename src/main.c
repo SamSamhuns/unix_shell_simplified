@@ -116,23 +116,60 @@ int main(void){
 			}
 		}
 		/* MAIN CMD RUNS HERE */
-		/* When run_piped_commands != 0 , there are no pipes so run
+		/* When check_pipe_rtn_loc == 0 , there are no pipes so run
 		   so we can run the main run_command function */
 		/* Checking if pipes exist */
 		int temp_pipes_loc[MAX_INPUT_ARR_LEN];         // Just for temporary use and has no use later
-		if  (check_pipe_rtn_loc(parsed_input, char_arg_len, temp_pipes_loc)== 0) {
+		if  (check_pipe_rtn_loc(parsed_input, char_arg_len, temp_pipes_loc) == 0) {
 			if (DEBUG==1) printf("Pipes were not disovered\n" );                // prints
 			run_command(char_arg_len, arg_order_exclamation, number_of_args, history_head,
 			            export_head, fptr, user_input, parsed_input);
 		}
+		/* if pipes do exist */
 		else {
-			if (run_piped_commands (parsed_input, char_arg_len, export_head, history_head,
-			                        fptr, user_input, number_of_args, arg_order_exclamation) != 0) {
+			int piped_return_value = run_piped_commands (parsed_input, char_arg_len, export_head, history_head,
+			                                             fptr, user_input, number_of_args, arg_order_exclamation);
+			/* if piped_return_value == -2, stderr redirection was done */
+			if (piped_return_value == 0) {
+				/* run_piped_commands ran successfully with no erros */
+                if (DEBUG == 1) {
+                    printf("Piped Command ran succesfully\n");
+                }
+			}
+			else if (piped_return_value == -2) {
+				/* stderr has been redirected inside run_piped_commands */
+                /*  Checking if 2> is present in the input cmd
+                    to find the index of the err output file
+        		    when 2> is discovered in code*/
+        		int error_file_create_loc = -1;
+        		for (size_t i = 0; i < char_arg_len; i++) {
+        			if (strlen(parsed_input[i]) == 2) {
+        				if ( parsed_input[i][0] == '2' && parsed_input[i][1] == '>') {
+                            error_file_create_loc = i;
+                            break;
+        				}
+        			}
+        		}
+
+                /* Don't have to worry about errors here as check is done
+                    by run_piped_commands(....) func
+                    if error redirection 2> was found, save the error in chosen file */
+                if (error_file_create_loc != -1) {
+                    FILE *err_fptr = fopen(parsed_input[error_file_create_loc+1], "w");
+                    fprintf(err_fptr, "Command not recognized.\n");
+                    fclose(err_fptr);
+                }
+			}
+			/* without stderr redirection */
+			else {
 				fprintf(stderr, "Command not recognized\n");
 			}
 		}
 	}
 	/* Control should not reach here */
+	if (DEBUG == 1) {
+		fprintf(stderr, "CONTROL SHOULD NEVER REACH HERE\n");
+	}
 	return 2;
 }
 
@@ -474,21 +511,36 @@ int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *expor
 	}
 	// Main parent
 	else if (main_pid > 0) {
-		/* code */
 		/* Parent checks if child process terminated correctly */
 		int rtnStatus;
 		waitpid(main_pid, &rtnStatus, 0);         // Parent process waits here for child to terminate.
 
-		// Verify child process terminated without error.
+		/* Verify child process terminated without error. */
+		/* WARNING if else if should never be used here */
 		if (rtnStatus == 0) {
-			if (DEBUG == 0) {
+			if (DEBUG == 1) {
 				printf("Child terminated normally.\n");
 			}
 			return 0;
 		}
+		/* case for stderr redirection */
+		/* checking the return status of child processes for std err redirection 2> */
+		if (WIFEXITED(rtnStatus))
+		{
+			int exit_status = WEXITSTATUS(rtnStatus);
+			if (DEBUG == 1) {
+				printf("Exit status of the child was %d\n",
+				       exit_status);
+			}
+			/* Case for std err redirection 2> */
+			if (exit_status == 2) {
+				return -2;
+			}
+		}
+		/* case when there was error in running piped commands */
 		if (rtnStatus != 0) {
-			if (DEBUG == 0) {
-				printf("Child terminated with an error.\n");
+			if (DEBUG == 1) {
+				fprintf(stderr, "Child terminated with an error.\n");
 			}
 			return -1;
 		}
@@ -499,6 +551,18 @@ int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *expor
 		   i.e. char *env_var[] = {"PATH=/bin:/usr/bin", NULL}; */
 		int env_var_index= 0;
 		char *env_var[MAX_INPUT_ARR_LEN];
+
+		/*  Checking if 2> is present in the input cmd
+            changeable_EXIT_STATUS is set to reflect the exit status of error in inputs
+		    when 2> is discovered in code, changeable_EXIT_STATUS is set to 2*/
+		int changeable_EXIT_STATUS = 1;
+		for (size_t i = 0; i < char_arg_len; i++) {
+			if (strlen(parsed_arr[i]) == 2) {
+				if ( parsed_arr[i][0] == '2' && parsed_arr[i][1] == '>') {
+					changeable_EXIT_STATUS = 2;
+				}
+			}
+		}
 
 		// generating the env_var variable
 		struct Node *cur = export_head;
@@ -640,7 +704,6 @@ int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *expor
 								exit(0);
 							}
 						}
-
 						/* Seeting up the correct path
 						   if the cmd_to_check i.e. grep is found in env_var path
 						   corrected_path is set to /usr/bin/grep */
@@ -654,13 +717,13 @@ int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *expor
 						/* Error in cmds and not found in path so return -1 */
 						else {
 							if (DEBUG==1) {printf("Command was not found and cmd_to_check is %s \n", cmd_to_check );}
-							exit(1);
+							exit(changeable_EXIT_STATUS);
 						}
 
 						fclose(stdin_fread);
 						execve(&corrected_path[0], cmd_to_run, env_var);
 						perror("execve");
-						exit(1);
+						exit(changeable_EXIT_STATUS);
 					}
 					/* Parent */
 					else {
@@ -747,13 +810,13 @@ int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *expor
 								if (DEBUG==1) {
 									printf("Command was not found and cmd_to_check is %s \n", cmd_to_check );
 								}
-								exit(1);
+								exit(changeable_EXIT_STATUS);
 							}
 
 							fclose(stdout_fwrite);
 							execve(&corrected_path[0], cmd_to_run, env_var);
 							perror("execve");
-							exit(1);
+							exit(changeable_EXIT_STATUS);
 						}
 
 						/* If there is a need for next piping if > is not the last pipe
@@ -781,7 +844,7 @@ int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *expor
 						}
 						else {
 							if (DEBUG ==1 ) {printf("Something went wrong.\n");}
-							exit(1);
+							exit(changeable_EXIT_STATUS);
 						}
 						fclose(stdout_fwrite);
 						exit(0);
@@ -1098,7 +1161,7 @@ int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *expor
 						/* if there was a previous cmd
 						   i.e. grep main < history.txt 2> new.txt */
 						if (cur_pipe_being_handled > 2) {
-							dup2(old_fds[READ], READ);
+							dup2(old_fds[READ], ERROR);
 							close(old_fds[READ]);
 							close(old_fds[WRITE]);
 						}
@@ -1117,7 +1180,7 @@ int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *expor
 							}
 							cmd_to_run[end_index] = NULL;
 
-                            /* Checking for built-in cmds
+							/* Checking for built-in cmds
 							   parsed_arr[0] is always checked
 							   and only 7 built-ins checked for now
 							   pwd > current.txt */
@@ -1134,6 +1197,7 @@ int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *expor
 										builtin_char_arg_len += 1;
 									}
 									built_in_cmds_run[builtin_char_arg_len] = "\0";
+
 
 									fclose(stdout_ferror);
 									run_command(builtin_char_arg_len, 0, number_of_args,
@@ -1157,13 +1221,31 @@ int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *expor
 								if (DEBUG==1) {
 									printf("Command was not found and cmd_to_check is %s \n", cmd_to_check );
 								}
-								exit(1);
+								exit(2);
+							}
+							/* if there was a previous cmd */
+							if (cur_pipe_being_handled > 2) {
+								int ch = getc(stderr);
+								while (ch != EOF && ch != '\0')
+								{
+									/* save from stderr to stdout stream */
+									putc(ch, stdout_ferror);
+									ch = getc(stderr);
+								}
+
+								if (feof(stderr)) {
+									if (DEBUG==1) {printf("End of file reached.\n"); }
+								}
+								else {
+									if (DEBUG==1) {printf("Something went wrong.\n");}
+									exit(2);
+								}
 							}
 
 							fclose(stdout_ferror);
 							execve(&corrected_path[0], cmd_to_run, env_var);
 							perror("execve");
-							exit(1);
+							exit(2);
 						}
 
 						/* If there is a need for next piping if 2> is not the last pipe
@@ -1178,22 +1260,22 @@ int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *expor
 						   i.e. cat < history.txt 2> new.txt
 						   getc(stdin) gets stdin one char at a time till EOF
 						   fgets() cannot be used as it terminates at newline chars */
-						int ch = getc(stdin);
+						int ch = getc(stderr);
 						while (ch != EOF && ch != '\0')
 						{
 							/* save from stdin to stdout stream */
-							putc(ch, stdout_fwrite);
-							ch = getc(stdin);
+							putc(ch, stdout_ferror);
+							ch = getc(stderr);
 						}
 
-						if (feof(stdin)) {
+						if (feof(stderr)) {
 							if (DEBUG==1) {printf("End of file reached.\n"); }
 						}
 						else {
-							if (DEBUG ==1 ) {printf("Something went wrong.\n");}
-							exit(1);
+							if (DEBUG==1) {printf("Something went wrong.\n");}
+							exit(2);
 						}
-						fclose(stdout_fwrite);
+						fclose(stdout_ferror);
 						exit(0);
 					}
 					/* Parent */
@@ -1246,7 +1328,7 @@ int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *expor
 							}
 							cmd_to_run[end_index] = NULL;
 
-                            /* Checking for built-in cmds
+							/* Checking for built-in cmds
 							   parsed_arr[0] is always checked
 							   and only 7 built-ins checked for now
 							   pwd > current.txt */
@@ -1286,13 +1368,13 @@ int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *expor
 								if (DEBUG==1) {
 									printf("Command was not found and cmd_to_check is %s \n", cmd_to_check );
 								}
-								exit(1);
+								exit(changeable_EXIT_STATUS);
 							}
 
 							fclose(stdout_fwrite);
 							execve(&corrected_path[0], cmd_to_run, env_var);
 							perror("execve");
-							exit(1);
+							exit(changeable_EXIT_STATUS);
 						}
 
 						/* If there is a need for next piping if > is not the last pipe
@@ -1319,8 +1401,8 @@ int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *expor
 							if (DEBUG==1) {printf("End of file reached.\n"); }
 						}
 						else {
-							if (DEBUG ==1 ) {printf("Something went wrong.\n");}
-							exit(1);
+							if (DEBUG==1) {printf("Something went wrong.\n");}
+							exit(changeable_EXIT_STATUS);
 						}
 						fclose(stdout_fwrite);
 						exit(0);
@@ -1376,7 +1458,7 @@ int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *expor
 							}
 							cmd_to_run[end_index] = NULL;
 
-                            /* Checking for built-in cmds
+							/* Checking for built-in cmds
 							   parsed_arr[0] is always checked
 							   and only 7 built-ins checked for now
 							   pwd > current.txt */
@@ -1416,13 +1498,13 @@ int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *expor
 								if (DEBUG==1) {
 									printf("Command was not found and cmd_to_check is %s \n", cmd_to_check );
 								}
-								exit(1);
+								exit(changeable_EXIT_STATUS);
 							}
 
 							fclose(stdout_fwrite);
 							execve(&corrected_path[0], cmd_to_run, env_var);
 							perror("execve");
-							exit(1);
+							exit(changeable_EXIT_STATUS);
 						}
 
 						/* If there is a need for next piping if >> is not the last pipe
@@ -1450,7 +1532,7 @@ int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *expor
 						}
 						else {
 							if (DEBUG ==1 ) {printf("Something went wrong.\n");}
-							exit(1);
+							exit(changeable_EXIT_STATUS);
 						}
 						fclose(stdout_fwrite);
 						exit(0);
@@ -1484,23 +1566,40 @@ int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *expor
 			}
 			/* Parent checks if child process terminated correctly */
 			int rtnStatus;
-			waitpid(fork_pid, &rtnStatus, 0);             // Parent process waits here for child to terminate.
+			waitpid(fork_pid, &rtnStatus, 0); // Parent process waits here for child to terminate.
 
+			/* checking the return status of child processes for std err redirection 2> */
+			/* WARNING if else if should never be used here */
+			if (WIFEXITED(rtnStatus))
+			{
+				int exit_status = WEXITSTATUS(rtnStatus);
+				if (DEBUG == 1) {
+					printf("Exit status of the child was %d\n",
+					       exit_status);
+				}
+
+				/* Case for std err redirection 2> */
+				if (exit_status == 2) {
+					exit(2);
+				}
+			}
 			// Verify child process terminated without error.
 			if (rtnStatus == 0) {
 				if (DEBUG == 1) {
 					printf("Child terminated normally.\n");
 				}
 			}
+			// Child process encountered an error, exit parent loop process as well
+			// but without std err redirection
 			if (rtnStatus != 0) {
 				if (DEBUG == 1) {
-					printf("Child terminated with an error.\n");
+					fprintf(stderr, "Child terminated with an error.\n");
 				}
 				exit(1);
 			}
 		}
 	}
 	/* Control should not reach here */
-	if (DEBUG==1) {printf("CONTORL SHOULD NOT GET HERE \n");}
+	if (DEBUG==0) {printf("CONTORL SHOULD NOT GET HERE \n");}
 	exit(-2);
 }
