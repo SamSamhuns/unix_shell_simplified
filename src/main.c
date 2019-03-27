@@ -133,7 +133,7 @@ int main(void){
 		}
 	}
 	/* Control should not reach here */
-	return 0;
+	return 2;
 }
 
 /* main cmd executing func that runs the right built-in or extern cmd */
@@ -1093,7 +1093,7 @@ int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *expor
 					}
 					/* Child process */
 					else if (fork_pid == 0) {
-						FILE *stdout_fwrite = fopen(parsed_arr[cmd_pos+1], "w");
+						FILE *stdout_ferror = fopen(parsed_arr[cmd_pos+1], "w");
 
 						/* if there was a previous cmd
 						   i.e. grep main < history.txt 2> new.txt */
@@ -1105,7 +1105,7 @@ int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *expor
 						/* if > is the first pipe
 						   i.e. ps -a 2> process.txt */
 						else {
-							dup2(fileno(stdout_fwrite), ERROR);
+							dup2(fileno(stdout_ferror), ERROR);
 
 							/* For running execve in the given form
 							   execve(path, cmd_to_run, env_var); */
@@ -1116,6 +1116,31 @@ int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *expor
 								cmd_to_run[i] = parsed_arr[i];
 							}
 							cmd_to_run[end_index] = NULL;
+
+                            /* Checking for built-in cmds
+							   parsed_arr[0] is always checked
+							   and only 7 built-ins checked for now
+							   pwd > current.txt */
+
+							for (int i = 0; i < 7; i++) {
+								if ((strcmp(built_in_cmd_arr[i], parsed_arr[0]) == 0) ||
+								    ((parsed_arr[0][0] == '!') &&
+								     (strlen(parsed_arr[0]) > 1)) )
+								{
+									char * built_in_cmds_run[MAX_INPUT_ARR_LEN];
+									int builtin_char_arg_len = 0;
+									for (size_t k = start_index; k < end_index; k++) {
+										built_in_cmds_run[k] = parsed_arr[k];
+										builtin_char_arg_len += 1;
+									}
+									built_in_cmds_run[builtin_char_arg_len] = "\0";
+
+									fclose(stdout_ferror);
+									run_command(builtin_char_arg_len, 0, number_of_args,
+									            history_head, export_head, fptr, user_input, built_in_cmds_run);
+									exit(0);
+								}
+							}
 
 							/* Seeting up the correct path
 							   if the cmd_to_check i.e. grep is found in env_var path
@@ -1135,14 +1160,14 @@ int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *expor
 								exit(1);
 							}
 
-							fclose(stdout_fwrite);
+							fclose(stdout_ferror);
 							execve(&corrected_path[0], cmd_to_run, env_var);
 							perror("execve");
 							exit(1);
 						}
 
 						/* If there is a need for next piping if 2> is not the last pipe
-						    i.e. cat < history.txt 2> process.txt 2> error.txt */
+						    i.e. cat < history.txt 2> error.txt > process.txt */
 						if (remaining_pipes_to_be_handled > 0) {
 							dup2(new_fds[WRITE], WRITE);
 							close(new_fds[READ]);
