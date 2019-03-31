@@ -596,8 +596,6 @@ int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *expor
 		}
 		env_var[env_var_index] = NULL;
 
-		/* indexes to denote what section of args from parsed_arr to use for each pipe*/
-		int looplen = 0;
 		pid_t wait_pid;
 		int fork_pid;
 		int child_status = 0;
@@ -637,7 +635,10 @@ int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *expor
 		/* MAIN LOOP it is assumed that spaces have been provided between cmds */
 		/* When space is provided between redirects and pipes i.e. cat > file.txt
 		   instead of cat>file.txt */
+        /* This loops through each pipe present in the piped input cmd */
 		for (int j = 1; j < pipes_loc[0]+2; j++) {
+            /* strlen length of individual pipe */
+            int looplen = 0;
 			if (remaining_pipes_to_be_handled > 0) {
 				TRY_AND_CATCH(pipe(new_fds), "pipe");
 			}
