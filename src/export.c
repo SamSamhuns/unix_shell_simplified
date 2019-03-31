@@ -15,14 +15,13 @@ void print_env_export_handler(struct Node *export_head) {
    0=success, -1=failure */
 int save_env_export_handler(char *parsed_arr[],
                             int char_arg_len, struct Node *export_head) {
-	int equal_sign_count = 0;
 	for (size_t i = 1; i < char_arg_len; i++) {
 		char *env_var_array[2];         /* array to hold env name and value*/
 		char temp_content_store[FILENAME_MAX];         /* temp char pointer arr to
 		                                                  store the value of ith parsed_input arr elem */
 		strcpy(temp_content_store, parsed_arr[i]);
 
-		equal_sign_count = 0;         /* Counting number of equal signs for validity */
+		int equal_sign_count = 0;         /* Counting number of equal signs for validity */
 		/* if = is encountered immediately, it is invalid */
 		if (parsed_arr[i][0] == '=') {
 			return -1;
