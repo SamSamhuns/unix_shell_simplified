@@ -13,8 +13,8 @@ void exit_cmd_handler(char **user_input_ptr,
 	// free the allocated memory that is passed as an arg to this func
 	free(*user_input_ptr);
 	/* freeing memory allocated inside the linked lists */
-	free_linked_list(history_head);
-	free_linked_list(export_head);
+	free_linked_list(&history_head);
+	free_linked_list(&export_head);
 	fclose(fptr);     /* free the file pointer */
 
 	exit(0);
