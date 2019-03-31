@@ -58,15 +58,18 @@ int main(void){
 	struct Node *history_head = NULL;
 	struct Node *export_head = NULL;
 	history_head = malloc(sizeof(Node));
-	history_head->next = NULL;
+    export_head = malloc(sizeof(Node));
 
-	export_head = malloc(sizeof(Node));
 	export_head->next = malloc(sizeof(Node));
 	export_head->next->next = malloc(sizeof(Node));
 
-	if (history_head == NULL || export_head == NULL || export_head->next == NULL ||
-	    export_head->next->next == NULL ) {
+	if (history_head == NULL || export_head == NULL) {
 		printf("Out of memory\n");
+        /* Preventing memory leak */
+        free(user_input);
+    	free_linked_list(&history_head);
+    	free_linked_list(&export_head);
+    	fclose(fptr);
 		return 1;
 	}
 
@@ -74,7 +77,9 @@ int main(void){
 	getcwd(user_input, MAX_CMD_INPUT_BUFFER);
 	strcpy(export_head->next->content, strcat(initial_pwd_value, user_input));
 	strcpy(export_head->next->next->content, "TERM=xterm-256color");
-	export_head->next->next->next = NULL;
+	/* Redundant to set linked_list_head->......->next to NULL
+        export_head->next->next->next = NULL;
+        history_head->next = NULL; */
 
 	/* load history.txt cmds in linked list buffer
 	   load func returns number of args that have been loaded */
@@ -85,6 +90,11 @@ int main(void){
 		// Checking if memory is available in the heap
 		if (user_input == NULL) {
 			printf("Out of memory\n" );
+            /* Preventing memory leak */
+            free(user_input);
+        	free_linked_list(&history_head);
+        	free_linked_list(&export_head);
+        	fclose(fptr);
 			return 1;
 		}
 		printf(">> ");
