@@ -4,7 +4,7 @@ This is an implementation of a simplified version of the UNIX SHELL using C. The
 After adding the necessary paths to the `PATH` ENV var with the `export` function, external commands can be run as well.
 I.e. after running `>> export PATH=/bin:/usr/bin`, external commands like `grep main < some_file` will function as normal.
 
-#### Piping and input/output redirection have also been implemented. 
+**Piping and input/output redirection have also been implemented**
 
 I.e. `cat < some_file | grep bar | grep foo > output.txt` will get the stdin for the `cat` command from some_file and pipe its stdout to `grep bar` which then pipes its output to `grep foo` and this stdout is finally saved to file `output.txt`.
 
@@ -32,7 +32,7 @@ $ make clean
 ```
 
 ## Algorithm in pseudocode for pipe implementation in loops
-       
+
        run_piped_cmds_func():
          fork
          if parent
@@ -44,7 +44,7 @@ $ make clean
             else
                 close all pipes
                 exit(SUCCESS)
-                
+
             fork
             if child
                 if there is a previous cmd
