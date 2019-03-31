@@ -1,10 +1,13 @@
 # unix_shell_simplified
+
+[![Build Status](https://travis-ci.org/SamSamhuns/unix_shell_simplified.svg?branch=master)](https://travis-ci.org/SamSamhuns/unix_shell_simplified)
+
 This is an implementation of a simplified version of the UNIX SHELL using C. The current implementation includes the built-in `pwd`, `cd`, `history`, `export`, `!Num` and `exit` functions.
 
 After adding the necessary paths to the `PATH` ENV var with the `export` function, external commands can be run as well.
 I.e. after running `>> export PATH=/bin:/usr/bin`, external commands like `grep main < some_file` will function as normal.
 
-**Piping and input/output redirection have also been implemented**
+Piping and input/output redirection have also been implemented
 
 I.e. `cat < some_file | grep bar | grep foo > output.txt` will get the stdin for the `cat` command from some_file and pipe its stdout to `grep bar` which then pipes its output to `grep foo` and this stdout is finally saved to file `output.txt`.
 
