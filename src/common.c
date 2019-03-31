@@ -93,15 +93,17 @@ int load_linked_list_history(struct Node *head) {
 }
 
 /* func to free memory allocated inside the linked lists */
-void free_linked_list(struct Node *head) {
-	struct Node *cur = head;
+void free_linked_list(struct Node **head) {
+	/* We have to dereference the head ref to get the real head */
+	struct Node *cur = *head;
 
 	while (cur != NULL ) {
 		struct Node *temp = cur;
 		cur = cur->next;
 		free (temp);
 	}
-	head = NULL;
+	/* Deref head to affect the actual head from the caller */
+	*head = NULL;
 }
 
 /* function to print the contents of the export linked list head */
