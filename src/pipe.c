@@ -93,7 +93,8 @@ int search_in_export_path_when_pipes( struct Node *export_head, char *cmd_to_che
 		}
 		cur = cur->next;
 	}
-	corrected_path = NULL;
+	/* Corrected path will not be used */
+	// corrected_path = NULL;
 	return -1;
 }
 
