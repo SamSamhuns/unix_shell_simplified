@@ -101,9 +101,8 @@ int search_in_export_path_when_pipes( struct Node *export_head, char *cmd_to_che
 /* Check for errors after pipes have been seen
    returns 0 on no error and -1 on ERRORS found */
 int error_whole_arg_check(char *parsed_arr[], int char_arg_len) {
-	int looplen=0;
 	for (int cmd_pos = 0; cmd_pos < char_arg_len; cmd_pos++) {
-		looplen = strlen(parsed_arr[cmd_pos]);
+		int looplen = strlen(parsed_arr[cmd_pos]);
 		if ( looplen == 1 ) {
 			if (parsed_arr[cmd_pos][0] == '<' ||
 			    parsed_arr[cmd_pos][0] == '>' ||
