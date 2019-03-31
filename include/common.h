@@ -30,7 +30,7 @@
 /* struct defn for linkedlist node */
 typedef struct Node {
         char content[MAX_INPUT_KWRD_LEN];
-        struct Node *next;
+        struct Node *next; // Node.next is initiated to NULL
 } Node;
 
 /* func to add node to end of linked list */
@@ -48,7 +48,7 @@ void print_linked_list_history( int number_of_args, struct Node *head);
 int load_linked_list_history(struct Node *head);
 
 /* func to free memory allocated inside the linked lists */
-void free_linked_list(struct Node *head);
+void free_linked_list(struct Node **head);
 
 /* function to add a node to end of the linked list */
 void push(struct Node *head, char cmd[MAX_INPUT_KWRD_LEN]);
