@@ -18,7 +18,6 @@ char *exclaim_cmd_handler(struct Node *head, int arg_order_exclamation) {
 	while ( cur != NULL ) {
 		if (arg_iterator == arg_order_exclamation) {
 			return (cur->content);
-			break;
 		}
 		cur = cur->next;
 		arg_iterator++;
