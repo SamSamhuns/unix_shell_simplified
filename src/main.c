@@ -53,23 +53,20 @@ int main(void){
 	char *user_input = calloc(MAX_CMD_INPUT_BUFFER, sizeof(char));
 	char initial_pwd_value[MAX_CMD_INPUT_BUFFER+10] = "PWD=";     /* string to hold the starting working dir*/
 
-	/* A history_head and a export_head node is initialized
-	   whoich is equal to NULL */
-	struct Node *history_head = NULL;
-	struct Node *export_head = NULL;
-	history_head = malloc(sizeof(Node));
-    export_head = malloc(sizeof(Node));
+	/* A history_head and an export_head node is initialized */
+	struct Node *history_head = malloc(sizeof(Node));
+	struct Node *export_head = malloc(sizeof(Node));
 
 	export_head->next = malloc(sizeof(Node));
 	export_head->next->next = malloc(sizeof(Node));
 
 	if (history_head == NULL || export_head == NULL) {
 		printf("Out of memory\n");
-        /* Preventing memory leak */
-        free(user_input);
-    	free_linked_list(&history_head);
-    	free_linked_list(&export_head);
-    	fclose(fptr);
+		/* Preventing memory leak */
+		free(user_input);
+		free_linked_list(&history_head);
+		free_linked_list(&export_head);
+		fclose(fptr);
 		return 1;
 	}
 
@@ -78,8 +75,8 @@ int main(void){
 	strcpy(export_head->next->content, strcat(initial_pwd_value, user_input));
 	strcpy(export_head->next->next->content, "TERM=xterm-256color");
 	/* Redundant to set linked_list_head->......->next to NULL
-        export_head->next->next->next = NULL;
-        history_head->next = NULL; */
+	    export_head->next->next->next = NULL;
+	    history_head->next = NULL; */
 
 	/* load history.txt cmds in linked list buffer
 	   load func returns number of args that have been loaded */
@@ -90,11 +87,11 @@ int main(void){
 		// Checking if memory is available in the heap
 		if (user_input == NULL) {
 			printf("Out of memory\n" );
-            /* Preventing memory leak */
-            free(user_input);
-        	free_linked_list(&history_head);
-        	free_linked_list(&export_head);
-        	fclose(fptr);
+			/* Preventing memory leak */
+			free(user_input);
+			free_linked_list(&history_head);
+			free_linked_list(&export_head);
+			fclose(fptr);
 			return 1;
 		}
 		printf(">> ");
@@ -170,12 +167,12 @@ int main(void){
 					fclose(err_fptr);
 				}
 			}
-            /* execv fails, error already written in file*/
-            else if (piped_return_value == -3) {
-                if (DEBUG == 1) {
+			/* execve fails, error already written in file*/
+			else if (piped_return_value == -3) {
+				if (DEBUG == 1) {
 					fprintf(stderr, "Execve fails\n");
 				}
-            }
+			}
 			/* without stderr redirection */
 			else {
 				fprintf(stderr, "Command not recognized\n");
@@ -409,12 +406,6 @@ int parser(char *user_input, char *parsed_arr[], size_t ui_length, struct Node *
 /* func to parse and return valur of env vars entered as cmd arguments
    in the form $ENV_VAR_NAME i.e. cd $JAVA */
 char *parse_env_var_call(char *cmd_argument, int cmd_len, struct Node * export_head) {
-	/* stores name of var after the $ sign. i.e. PATH for $PATH*/
-	char parsed_argument[cmd_len];
-	/* stores content of export_linked_list env_var name and val combinations
-	   i.e. PATH=/usr/bin:/usr */
-	char temp_export_linked_list_store[MAX_CMD_INPUT_BUFFER];
-
 	/* immediately return the same NULL str is a NULL string is passed*/
 	if (cmd_argument == NULL) {
 		return cmd_argument;
@@ -422,6 +413,12 @@ char *parse_env_var_call(char *cmd_argument, int cmd_len, struct Node * export_h
 
 	/* if the cmd_arg does start with a $ */
 	if (cmd_argument[0] == '$') {
+        /* stores name of var after the $ sign. i.e. PATH for $PATH*/
+        char parsed_argument[cmd_len];
+        /* stores content of export_linked_list env_var name and val combinations
+           i.e. PATH=/usr/bin:/usr */
+        char temp_export_linked_list_store[MAX_CMD_INPUT_BUFFER];
+
 		/* save contents of cmd_argument[1:] to parsed_argument */
 		for (size_t i = 1; i < cmd_len; i++) {
 			parsed_argument[i-1] = cmd_argument[i];
@@ -558,10 +555,10 @@ int run_piped_commands (char *parsed_arr[], int char_arg_len, struct Node *expor
 			if (exit_status == 2) {
 				return -2;
 			}
-            /* case for catch missed execve program fails */
-            else if (exit_status == 3) {
-                return -3;
-            }
+			/* case for catch missed execve program fails */
+			else if (exit_status == 3) {
+				return -3;
+			}
 		}
 		/* case when there was error in running piped commands */
 		if (rtnStatus != 0) {
