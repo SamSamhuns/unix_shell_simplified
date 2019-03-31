@@ -33,6 +33,7 @@ $ make clean
 
 ## Algorithm in pseudocode for pipe implementation in loops
 
+```C
        run_piped_cmds_func():
          fork
          if parent
@@ -66,11 +67,12 @@ $ make clean
            if there are multiple cmds
             close(old_fds[0])
             close(old_fds[1])
+```
 
 ## Author
 Samridha Shrestha
 
 ## Useful resources
-1. *UNIX Tutorial* <http://www.ee.surrey.ac.uk/Teaching/Unix/index.html>
-2. *Makefile Introduction Tutorial* <https://www.cs.colostate.edu/~cs157/LectureMakefile.pdf>
-3. *Makefile Intermediate Tutorial* <http://www.cs.colby.edu/maxwell/courses/tutorials/maketutor/>
+1.  *UNIX Tutorial* <http://www.ee.surrey.ac.uk/Teaching/Unix/index.html>
+2.  *Makefile Introduction Tutorial* <https://www.cs.colostate.edu/~cs157/LectureMakefile.pdf>
+3.  *Makefile Intermediate Tutorial* <http://www.cs.colby.edu/maxwell/courses/tutorials/maketutor/>
