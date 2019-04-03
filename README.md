@@ -1,6 +1,7 @@
 # unix_shell_simplified
 
 [![Build Status](https://travis-ci.org/SamSamhuns/unix_shell_simplified.svg?branch=master)](https://travis-ci.org/SamSamhuns/unix_shell_simplified)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0) 
 
 This is an implementation of a simplified version of the UNIX SHELL using C. The current implementation includes the built-in `pwd`, `cd`, `history`, `export`, `!Num` and `exit` functions.
 
