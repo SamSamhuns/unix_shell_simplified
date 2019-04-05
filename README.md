@@ -1,7 +1,7 @@
 # unix_shell_simplified
 
 [![Build Status](https://travis-ci.org/SamSamhuns/unix_shell_simplified.svg?branch=master)](https://travis-ci.org/SamSamhuns/unix_shell_simplified)
-[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0) 
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
 
 This is an implementation of a simplified version of the UNIX SHELL using C. The current implementation includes the built-in `pwd`, `cd`, `history`, `export`, `!Num` and `exit` functions.
 
@@ -15,7 +15,7 @@ I.e. `cat < some_file | grep bar | grep foo > output.txt` will get the stdin for
 The pseudocode logic for the pipe implementation is discussed below as well.
 
 ## Shell activity flow Diagram
-<img src="https://github.com/SamSamhuns/unix_shell_simplified/blob/master/shell_activity_flow_diagram.png" />
+<img src="img/shell_activity_flow_diagram.png" />
 
 ## Requirements
 This shell can only be built in Mac OS and Linux/UNIX based systems.
