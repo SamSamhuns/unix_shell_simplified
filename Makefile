@@ -35,5 +35,13 @@ $(TARGET): $(OBJECTS)
 # Any file with the name clean will not interrupt the cmd clean
 .PHONY: clean
 
-clean:
-	rm -rf $(ODIR) *.DS_Store $(TARGET) 
+clean: clean-obj clean-mac-fsys clean-build
+
+clean-obj:
+	rm -rf $(ODIR)
+
+clean-mac-fsys:
+	find . -name ".DS_Store" -delete
+
+clean-build:
+	rm -rf $(TARGET)
